@@ -1,52 +1,120 @@
-import React from 'react';
-import { CheckCircle2, AlertTriangle, XCircle, Info, X } from 'lucide-react';
+import React, { useEffect, useState } from "react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Info,
+  X,
+  XCircle
+} from "lucide-react";
+
+const TOAST_VISIBLE_MS = 4200;
+const TOAST_EXIT_MS = 280;
+
+const TOAST_CONFIG = {
+  success: {
+    icon: CheckCircle2,
+    iconClass: "text-emerald-400",
+    borderClass: "border-emerald-400/25"
+  },
+  warning: {
+    icon: AlertTriangle,
+    iconClass: "text-amber-400",
+    borderClass: "border-amber-400/25"
+  },
+  error: {
+    icon: XCircle,
+    iconClass: "text-rose-400",
+    borderClass: "border-rose-400/25"
+  },
+  info: {
+    icon: Info,
+    iconClass: "text-blue-400",
+    borderClass: "border-blue-400/25"
+  }
+};
+
+function Toast({ toast, removeToast }) {
+  const [exiting, setExiting] = useState(false);
+
+  const config = TOAST_CONFIG[toast.type] || TOAST_CONFIG.info;
+  const Icon = config.icon;
+
+  useEffect(() => {
+    const exitTimer = window.setTimeout(() => {
+      setExiting(true);
+    }, TOAST_VISIBLE_MS);
+
+    const removeTimer = window.setTimeout(() => {
+      removeToast(toast.id);
+    }, TOAST_VISIBLE_MS + TOAST_EXIT_MS);
+
+    return () => {
+      window.clearTimeout(exitTimer);
+      window.clearTimeout(removeTimer);
+    };
+  }, [toast.id, removeToast]);
+
+  const dismiss = () => {
+    if (exiting) return;
+    setExiting(true);
+
+    window.setTimeout(() => {
+      removeToast(toast.id);
+    }, TOAST_EXIT_MS);
+  };
+
+  return (
+    <div
+      className={`notification-toast ${
+        exiting ? "notification-toast-exit" : ""
+      } pointer-events-auto relative flex w-full items-start gap-3 overflow-hidden rounded-xl border bg-zinc-950/70 p-4 shadow-2xl shadow-black/30 backdrop-blur-2xl ${config.borderClass}`}
+      role="status"
+      aria-live="polite"
+    >
+      <div className="pointer-events-none absolute inset-0 bg-white/[0.025]" />
+
+      <Icon
+        className={`relative mt-0.5 h-5 w-5 shrink-0 ${config.iconClass}`}
+      />
+
+      <div className="relative min-w-0 flex-1 text-xs leading-relaxed">
+        {toast.title && (
+          <p className="truncate font-semibold text-zinc-100">
+            {toast.title}
+          </p>
+        )}
+
+        {toast.message && (
+          <p className="mt-1 max-h-24 overflow-y-auto break-words whitespace-pre-wrap text-zinc-400">
+            {toast.message}
+          </p>
+        )}
+      </div>
+
+      <button
+        type="button"
+        onClick={dismiss}
+        aria-label="Dismiss notification"
+        className="relative shrink-0 rounded-md p-1 text-zinc-500 transition-all duration-200 hover:bg-white/[0.07] hover:text-zinc-200 active:scale-95"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
 
 export default function ToastContainer({ toasts, removeToast }) {
-  // Strict limit: Max 3 visible notifications to prevent UI overlap
   const visibleToasts = toasts.slice(-3);
 
   return (
-    <div className="fixed top-5 right-5 z-[100] flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-4 sm:px-0">
-      {visibleToasts.map((toast) => {
-        const icons = {
-          success: <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />,
-          warning: <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />,
-          error: <XCircle className="w-5 h-5 text-rose-400 shrink-0" />,
-          info: <Info className="w-5 h-5 text-blue-400 shrink-0" />
-        };
-
-        const bgBorders = {
-          success: "bg-zinc-900/95 border-emerald-500/30 text-emerald-200",
-          warning: "bg-zinc-900/95 border-amber-500/30 text-amber-200",
-          error: "bg-zinc-900/95 border-rose-500/30 text-rose-200",
-          info: "bg-zinc-900/95 border-blue-500/30 text-blue-200"
-        };
-
-        return (
-          <div
-            key={toast.id}
-            className={`animate-toast-in pointer-events-auto flex items-start gap-3 p-4 rounded-xl border shadow-2xl shadow-black/40 backdrop-blur-md transition-all duration-200 hover:-translate-y-0.5 hover:shadow-black/60 w-full overflow-hidden ${bgBorders[toast.type] || bgBorders.info}`}
-          >
-            {icons[toast.type]}
-            <div className="flex-1 min-w-0 text-xs leading-relaxed">
-              {toast.title && (
-                <p className="font-semibold text-zinc-100 truncate">{toast.title}</p>
-              )}
-              {toast.message && (
-                <p className="text-zinc-400 mt-0.5 break-words whitespace-pre-wrap max-h-32 overflow-y-auto">
-                  {toast.message}
-                </p>
-              )}
-            </div>
-            <button
-              onClick={() => removeToast(toast.id)}
-              className="text-zinc-500 hover:text-zinc-300 shrink-0 transition-colors p-0.5 rounded hover:bg-zinc-800"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        );
-      })}
+    <div className="pointer-events-none fixed right-4 top-4 z-[100] flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-2.5 sm:right-6 sm:top-6">
+      {visibleToasts.map((toast) => (
+        <Toast
+          key={toast.id}
+          toast={toast}
+          removeToast={removeToast}
+        />
+      ))}
     </div>
   );
 }

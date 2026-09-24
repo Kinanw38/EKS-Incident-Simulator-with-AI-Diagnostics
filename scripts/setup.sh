@@ -10,7 +10,6 @@ NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-
 TERRAFORM_DIR="$PROJECT_ROOT/terraform"
 BACKEND_DIR="$PROJECT_ROOT/backend"
 FRONTEND_DIR="$PROJECT_ROOT/frontend"
@@ -27,34 +26,22 @@ FRONTEND_PORT="${FRONTEND_PORT:-3000}"
 
 mkdir -p "$LOG_DIR"
 
-print_error() {
-  echo -e "${RED}❌ $1${NC}" >&2
-}
-
-print_warning() {
-  echo -e "${YELLOW}⚠️  $1${NC}"
-}
-
-print_success() {
-  echo -e "${GREEN}✅ $1${NC}"
-}
+print_error() { echo -e "${RED}❌ $1${NC}" >&2; }
+print_warning() { echo -e "${YELLOW}⚠️  $1${NC}"; }
+print_success() { echo -e "${GREEN}✅ $1${NC}"; }
 
 cleanup_on_error() {
   print_error "Setup failed."
-
   echo
   echo "Check the following logs if a service failed:"
   echo "  Backend:  $BACKEND_LOG"
   echo "  Frontend: $FRONTEND_LOG"
-
   exit 1
 }
 
 trap cleanup_on_error ERR
 
-command_exists() {
-  command -v "$1" >/dev/null 2>&1
-}
+command_exists() { command -v "$1" >/dev/null 2>&1; }
 
 require_command() {
   if ! command_exists "$1"; then
@@ -90,20 +77,17 @@ stop_stale_process() {
 check_prerequisites() {
   echo
   echo "🔍 Checking required tools..."
-
   require_command terraform
   require_command aws
   require_command kubectl
   require_command python3
   require_command npm
-
   print_success "All required tools are available."
 }
 
 provision_infrastructure() {
   echo
   echo -e "${BLUE}📦 Provisioning AWS infrastructure with Terraform...${NC}"
-
   cd "$TERRAFORM_DIR"
 
   terraform init
@@ -126,16 +110,12 @@ provision_infrastructure() {
 
   echo
   echo "🔗 Updating local kubeconfig..."
-
-  aws eks update-kubeconfig \
-    --region "$AWS_REGION" \
-    --name "$CLUSTER_NAME"
+  aws eks update-kubeconfig --region "$AWS_REGION" --name "$CLUSTER_NAME"
 }
 
 wait_for_kubernetes() {
   echo
   echo "🩺 Waiting for the Kubernetes API..."
-
   local max_attempts=30
   local attempt=1
 
@@ -199,7 +179,6 @@ prepare_frontend() {
       cd "$FRONTEND_DIR"
       npm ci
     )
-
     print_success "Frontend dependencies installed."
   else
     echo "Frontend node_modules already exists; skipping npm install."
@@ -242,7 +221,6 @@ start_backend() {
   (
     cd "$BACKEND_DIR"
 
-    # Explicitly remove Demo Mode for local AWS execution.
     unset DEMO_MODE
 
     # shellcheck disable=SC1091
@@ -303,7 +281,7 @@ start_frontend() {
 print_summary() {
   local frontend_url
   frontend_url="$(
-    grep -Eo 'http://(localhost|127\.0\.0\.1):[0-9]+' "$FRONTEND_LOG" \
+    grep -Eo 'http://(localhost|127\\.0\\.0\\.1):[0-9]+' "$FRONTEND_LOG" \
       | head -n 1 \
       || true
   )"

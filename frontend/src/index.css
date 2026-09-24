@@ -14,35 +14,70 @@ body {
   letter-spacing: -0.011em;
 }
 
-/* Custom Sleek Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
   background: #09090b;
 }
+
 ::-webkit-scrollbar-thumb {
   background: #27272a;
   border-radius: 3px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
   background: #3f3f46;
 }
 
-/* Visible keyboard focus, kept subtle to match the dark UI */
 button:focus-visible,
 input:focus-visible {
-  outline: 2px solid rgba(59, 130, 246, 0.5);
+  outline: 2px solid rgba(59, 130, 246, 0.55);
   outline-offset: 2px;
 }
 
-/* ---- Motion ---- */
+button,
+input {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (hover: hover) {
+  button:not(:disabled) {
+    transition:
+      transform 180ms cubic-bezier(0.16, 1, 0.3, 1),
+      background-color 180ms ease,
+      border-color 180ms ease,
+      color 180ms ease,
+      box-shadow 180ms ease;
+  }
+
+  button:not(:disabled):hover {
+    transform: translateY(-1px);
+  }
+
+  button:not(:disabled):active {
+    transform: translateY(0) scale(0.98);
+  }
+}
+
 @media (prefers-reduced-motion: no-preference) {
   @keyframes tab-fade-in {
     from {
       opacity: 0;
-      transform: translateY(6px);
+      transform: translateY(7px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes content-fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(5px);
     }
     to {
       opacity: 1;
@@ -53,50 +88,85 @@ input:focus-visible {
   @keyframes toast-slide-in {
     from {
       opacity: 0;
-      transform: translateX(24px) scale(0.96);
+      transform: translate3d(24px, 0, 0) scale(0.97);
     }
     to {
       opacity: 1;
-      transform: translateX(0) scale(1);
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+  }
+
+  @keyframes toast-slide-out {
+    from {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: translate3d(24px, 0, 0) scale(0.97);
+    }
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
     }
   }
 
   .animate-tab-in {
-    animation: tab-fade-in 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: tab-fade-in 280ms cubic-bezier(0.16, 1, 0.3, 1);
   }
 
-  .animate-toast-in {
-    animation: toast-slide-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  .animate-content-in {
+    animation: content-fade-in 240ms cubic-bezier(0.16, 1, 0.3, 1);
   }
-}
 
-@media (prefers-reduced-motion: reduce) {
-  .animate-tab-in,
-  .animate-toast-in {
-    animation: none;
+  .notification-toast {
+    animation: toast-slide-in 260ms cubic-bezier(0.16, 1, 0.3, 1);
   }
-}
 
-/* ---- Skeleton loaders ---- */
-@keyframes shimmer {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
+  .notification-toast-exit {
+    animation: toast-slide-out 280ms cubic-bezier(0.4, 0, 1, 1) forwards;
   }
 }
 
 .skeleton {
-  background: linear-gradient(90deg, #18181b 25%, #27272a 37%, #18181b 63%);
+  background: linear-gradient(
+    90deg,
+    #18181b 25%,
+    #27272a 37%,
+    #18181b 63%
+  );
   background-size: 400% 100%;
   animation: shimmer 1.4s ease-in-out infinite;
   border-radius: 6px;
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+
+  .animate-tab-in,
+  .animate-content-in,
+  .notification-toast,
+  .notification-toast-exit,
   .skeleton {
     animation: none;
+  }
+
+  .skeleton {
     background: #1f1f23;
   }
 }
