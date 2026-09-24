@@ -3,10 +3,10 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from security import is_command_allowed
-from scenarios import SCENARIOS
-from k8s_client import k8s_manager
-from rca_engine import analyze_incident_telemetry
+from .security import is_command_allowed
+from .scenarios import SCENARIOS
+from .k8s_client import k8s_manager
+from .rca_engine import analyze_incident_telemetry
 
 
 app = FastAPI(
