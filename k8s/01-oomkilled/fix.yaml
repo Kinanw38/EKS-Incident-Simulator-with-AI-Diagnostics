@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-service
+  namespace: default
+  labels:
+    app: api-service
+    sim-incident: oomkilled
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api-service
+  template:
+    metadata:
+      labels:
+        app: api-service
+    spec:
+      containers:
+      - name: memory-stress
+        image: polinux/stress
+        command: ["stress"]
+        args: ["--vm", "1", "--vm-bytes", "150M", "--vm-hang", "1"]
+        resources:
+          limits:
+            memory: "256Mi"
+          requests:
+            memory: "128Mi"

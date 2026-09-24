@@ -1,0 +1,89 @@
+# ==========================================
+# Terraform & AWS Secrets
+# ==========================================
+**/terraform/.terraform/
+**/terraform/.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+kubeconfig*
+*.pem
+*.key
+crash.log
+.terraformrc
+terraform.rc
+
+# ==========================================
+# Python & FastAPI Backend
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ==========================================
+# Node.js & React Frontend
+# ==========================================
+**/frontend/node_modules/
+**/frontend/dist/
+**/frontend/build/
+.npm
+.eslintcache
+.vite/
+package-lock.json.bak
+
+# ==========================================
+# IDEs & System Garbage
+# ==========================================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+.DS_Store?
+ehthumbs.db
+Icon?
+Thumbs.db
+
+# ==========================================
+# Environment Variables & Logs
+# ==========================================
+.env
+.env.local
+.env.*.local
+*.log
+
+# ==========================================
+# Raw context/export dumps used only for AI review sessions
+# ==========================================
+ai-project-context.txt
+terraformfiles.txt
