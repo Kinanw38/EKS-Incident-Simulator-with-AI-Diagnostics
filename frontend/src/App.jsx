@@ -18,39 +18,20 @@ const API_BASE =
   import.meta.env.VITE_API_URL || "http://localhost:8000/api";
 
 const HEALTH_REFRESH_INTERVAL = 10000;
+const INITIAL_RETRY_DELAY = 5000;
+const INITIAL_MAX_ATTEMPTS = 8;
 
 const TERMINAL_PRESETS = [
-  {
-    label: "Get Pods",
-    command: "kubectl get pods"
-  },
-  {
-    label: "Get Services",
-    command: "kubectl get services"
-  },
-  {
-    label: "Get Events",
-    command: "kubectl get events"
-  },
-  {
-    label: "Get Deployments",
-    command: "kubectl get deployments"
-  },
-  {
-    label: "Get Nodes",
-    command: "kubectl get nodes"
-  },
-  {
-    label: "Cluster Info",
-    command: "kubectl cluster-info"
-  }
+  { label: "Get Pods", command: "kubectl get pods" },
+  { label: "Get Services", command: "kubectl get services" },
+  { label: "Get Events", command: "kubectl get events" },
+  { label: "Get Deployments", command: "kubectl get deployments" },
+  { label: "Get Nodes", command: "kubectl get nodes" },
+  { label: "Cluster Info", command: "kubectl cluster-info" }
 ];
 
 function getModeLabel(clusterHealth) {
-  if (
-    clusterHealth?.mode === "live" &&
-    clusterHealth?.connected
-  ) {
+  if (clusterHealth?.mode === "live" && clusterHealth?.connected) {
     return "LIVE";
   }
 
@@ -67,7 +48,7 @@ function getModeClasses(clusterHealth) {
   if (mode === "LIVE") {
     return {
       badge:
-        "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+        "border-emerald-500/20 bg-emerald-500/10 text-emerald-400",
       dot: "bg-emerald-400",
       border: "border-emerald-500/30",
       background: "bg-emerald-500/[0.04]",
@@ -77,8 +58,7 @@ function getModeClasses(clusterHealth) {
 
   if (mode === "DEMO") {
     return {
-      badge:
-        "bg-blue-500/10 text-blue-400 border-blue-500/20",
+      badge: "border-blue-500/20 bg-blue-500/10 text-blue-400",
       dot: "bg-blue-400",
       border: "border-blue-500/30",
       background: "bg-blue-500/[0.04]",
@@ -87,8 +67,7 @@ function getModeClasses(clusterHealth) {
   }
 
   return {
-    badge:
-      "bg-rose-500/10 text-rose-400 border-rose-500/20",
+    badge: "border-rose-500/20 bg-rose-500/10 text-rose-400",
     dot: "bg-rose-400",
     border: "border-rose-500/30",
     background: "bg-rose-500/[0.04]",
@@ -118,8 +97,8 @@ function getEnvironmentCopy(modeLabel) {
   return {
     title: "Environment Unavailable",
     description:
-      "The application could not reach the backend or the live Kubernetes cluster.",
-    detail: "Waiting for a connection"
+      "The application is waiting for the backend or live Kubernetes cluster to become available.",
+    detail: "Connection unavailable"
   };
 }
 
@@ -127,44 +106,36 @@ export default function App() {
   const [activeTab, setActiveTab] = useState("overview");
   const [scenarios, setScenarios] = useState([]);
   const [selectedScenario, setSelectedScenario] = useState(null);
+  const [resolvedIncidentTitle, setResolvedIncidentTitle] = useState(null);
+
   const [clusterHealth, setClusterHealth] = useState(null);
   const [lastHealthUpdate, setLastHealthUpdate] = useState(null);
+  const [healthLoading, setHealthLoading] = useState(false);
+
   const [rcaResult, setRcaResult] = useState(null);
   const [rcaLoading, setRcaLoading] = useState(false);
+
   const [remediating, setRemediating] = useState(false);
-  const [remediationSuccess, setRemediationSuccess] =
-    useState(false);
-  const [terminalCmd, setTerminalCmd] =
-    useState("kubectl get pods");
+  const [remediationSuccess, setRemediationSuccess] = useState(false);
+
+  const [terminalCmd, setTerminalCmd] = useState("kubectl get pods");
   const [terminalOutput, setTerminalOutput] = useState("");
-  const [terminalLoading, setTerminalLoading] =
-    useState(false);
+  const [terminalLoading, setTerminalLoading] = useState(false);
+
   const [toasts, setToasts] = useState([]);
-  const [initialLoading, setInitialLoading] =
-    useState(true);
-  const [scenariosError, setScenariosError] =
-    useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [scenariosError, setScenariosError] = useState(false);
+  const [backendReady, setBackendReady] = useState(false);
 
   const healthRequestInFlight = useRef(false);
+  const initialLoadActive = useRef(true);
 
   const addToast = (type, title, message) => {
     const id = Date.now() + Math.random();
-
     setToasts((previous) => [
       ...previous,
-      {
-        id,
-        type,
-        title,
-        message
-      }
+      { id, type, title, message }
     ]);
-
-    window.setTimeout(() => {
-      setToasts((previous) =>
-        previous.filter((toast) => toast.id !== id)
-      );
-    }, 4500);
   };
 
   const removeToast = (id) => {
@@ -175,10 +146,11 @@ export default function App() {
 
   const fetchClusterHealth = async ({ silent = false } = {}) => {
     if (healthRequestInFlight.current) {
-      return;
+      return false;
     }
 
     healthRequestInFlight.current = true;
+    setHealthLoading(true);
 
     try {
       const response = await fetch(`${API_BASE}/health`);
@@ -193,7 +165,12 @@ export default function App() {
 
       setClusterHealth(data.cluster);
       setLastHealthUpdate(new Date());
+      setBackendReady(true);
+
+      return true;
     } catch (error) {
+      setBackendReady(false);
+
       setClusterHealth({
         status: "UNAVAILABLE",
         mode: "unavailable",
@@ -201,23 +178,25 @@ export default function App() {
         node_count: 0,
         healthy_nodes: 0,
         message:
-          "Backend or Kubernetes connection is unavailable."
+          "Waiting for the backend or Kubernetes connection."
       });
 
-      if (!silent) {
+      if (!silent && !initialLoadActive.current) {
         addToast(
           "error",
           "Backend Unavailable",
-          error.message ||
-            "Could not read backend health."
+          error.message || "Could not read backend health."
         );
       }
+
+      return false;
     } finally {
       healthRequestInFlight.current = false;
+      setHealthLoading(false);
     }
   };
 
-  const fetchScenarios = async () => {
+  const fetchScenarios = async ({ silent = false } = {}) => {
     try {
       const response = await fetch(`${API_BASE}/scenarios`);
 
@@ -231,28 +210,64 @@ export default function App() {
 
       setScenarios(data);
       setScenariosError(false);
+      setBackendReady(true);
 
-      // Intentionally do not select the first scenario.
-      // The dashboard should start with no active incident.
+      return true;
     } catch (error) {
       setScenariosError(true);
 
-      addToast(
-        "error",
-        "API Connection Failed",
-        error.message ||
-          "Could not load incident scenarios."
-      );
+      if (!silent && !initialLoadActive.current) {
+        addToast(
+          "error",
+          "API Connection Failed",
+          error.message || "Could not load incident scenarios."
+        );
+      }
+
+      return false;
     }
   };
 
   useEffect(() => {
-    Promise.all([
-      fetchClusterHealth(),
-      fetchScenarios()
-    ]).finally(() => {
-      setInitialLoading(false);
-    });
+    let cancelled = false;
+
+    const loadInitialData = async () => {
+      for (
+        let attempt = 1;
+        attempt <= INITIAL_MAX_ATTEMPTS;
+        attempt += 1
+      ) {
+        const [healthLoaded, scenariosLoaded] = await Promise.all([
+          fetchClusterHealth({ silent: true }),
+          fetchScenarios({ silent: true })
+        ]);
+
+        if (healthLoaded && scenariosLoaded) {
+          break;
+        }
+
+        if (
+          attempt < INITIAL_MAX_ATTEMPTS &&
+          !cancelled
+        ) {
+          await new Promise((resolve) => {
+            window.setTimeout(resolve, INITIAL_RETRY_DELAY);
+          });
+        }
+      }
+
+      if (!cancelled) {
+        initialLoadActive.current = false;
+        setInitialLoading(false);
+      }
+    };
+
+    loadInitialData();
+
+    return () => {
+      cancelled = true;
+      initialLoadActive.current = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -266,9 +281,9 @@ export default function App() {
   }, []);
 
   const handleRunScenario = async (scenario) => {
-    setSelectedScenario(scenario);
     setRcaResult(null);
     setRemediationSuccess(false);
+    setResolvedIncidentTitle(null);
 
     try {
       const response = await fetch(
@@ -286,6 +301,8 @@ export default function App() {
         );
       }
 
+      setSelectedScenario(scenario);
+
       addToast(
         "warning",
         "Incident Triggered",
@@ -296,33 +313,25 @@ export default function App() {
 
       await fetchClusterHealth();
     } catch (error) {
+      setSelectedScenario(null);
+
       addToast(
         "error",
         "Incident Trigger Failed",
-        error.message ||
-          "Could not trigger the incident."
+        error.message || "Could not trigger the incident."
       );
     }
-  };
-
-  const clearSelectedIncident = () => {
-    setSelectedScenario(null);
-    setRcaResult(null);
-    setRemediationSuccess(false);
   };
 
   const fetchAiRca = async () => {
-    if (!selectedScenario) {
-      return;
-    }
-
     setRcaLoading(true);
 
     try {
-      const response = await fetch(
-        `${API_BASE}/scenarios/${selectedScenario.id}/rca`
-      );
+      const endpoint = selectedScenario
+        ? `${API_BASE}/scenarios/${selectedScenario.id}/rca`
+        : `${API_BASE}/health-analysis`;
 
+      const response = await fetch(endpoint);
       const data = await response.json();
 
       if (!response.ok) {
@@ -335,17 +344,18 @@ export default function App() {
 
       addToast(
         "info",
-        "Analysis Complete",
-        `RCA generated via ${
-          data.source || "the diagnostic engine"
-        }.`
+        selectedScenario
+          ? "Analysis Complete"
+          : "System Health Check Complete",
+        selectedScenario
+          ? `RCA generated via ${data.source || "diagnostic engine"}.`
+          : "No active incident detected."
       );
     } catch (error) {
       addToast(
         "error",
-        "RCA Failed",
-        error.message ||
-          "Unable to analyze telemetry."
+        "Analysis Failed",
+        error.message || "Unable to analyze the environment."
       );
     } finally {
       setRcaLoading(false);
@@ -357,18 +367,23 @@ export default function App() {
       return;
     }
 
+    const incidentTitle = selectedScenario.title;
+
     setRemediating(true);
 
     try {
-      const response = await fetch(`${API_BASE}/remediate`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          incident_id: selectedScenario.id
-        })
-      });
+      const response = await fetch(
+        `${API_BASE}/remediate`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            incident_id: selectedScenario.id
+          })
+        }
+      );
 
       const data = await response.json();
 
@@ -379,12 +394,14 @@ export default function App() {
       }
 
       setRemediationSuccess(true);
+      setResolvedIncidentTitle(incidentTitle);
+      setSelectedScenario(null);
+      setRcaResult(null);
 
       addToast(
         "success",
-        "Remediation Successful",
-        data.message ||
-          "The remediation completed successfully."
+        "Incident Resolved",
+        `${incidentTitle} was remediated successfully.`
       );
 
       await fetchClusterHealth();
@@ -392,8 +409,7 @@ export default function App() {
       addToast(
         "error",
         "Remediation Failed",
-        error.message ||
-          "Could not apply remediation."
+        error.message || "Could not apply remediation."
       );
     } finally {
       setRemediating(false);
@@ -421,17 +437,14 @@ export default function App() {
           headers: {
             "Content-Type": "application/json"
           },
-          body: JSON.stringify({
-            command
-          })
+          body: JSON.stringify({ command })
         }
       );
 
       const data = await response.json();
 
       if (!response.ok) {
-        const detail =
-          data.detail || "Command was rejected.";
+        const detail = data.detail || "Command was rejected.";
 
         setTerminalOutput(
           `[COMMAND ERROR]\n${detail}`
@@ -446,10 +459,12 @@ export default function App() {
         return;
       }
 
+      const mode = String(
+        data.mode || "unknown"
+      ).toUpperCase();
+
       setTerminalOutput(
-        `[${String(
-          data.mode || "unknown"
-        ).toUpperCase()} OUTPUT]\n${data.output}`
+        `[${mode} OUTPUT]\n${data.output || "Command completed without output."}`
       );
     } catch (error) {
       setTerminalOutput(
@@ -459,8 +474,7 @@ export default function App() {
       addToast(
         "error",
         "Terminal Unavailable",
-        error.message ||
-          "Could not connect to backend."
+        error.message || "Could not connect to backend."
       );
     } finally {
       setTerminalLoading(false);
@@ -576,7 +590,7 @@ export default function App() {
               ? "Connected to a live Kubernetes cluster."
               : modeLabel === "DEMO"
                 ? "Using deterministic simulated data."
-                : "Live cluster is not reachable."}
+                : "Waiting for a connection."}
           </p>
         </div>
       </aside>
@@ -588,531 +602,706 @@ export default function App() {
             <span>/</span>
 
             <span className="truncate text-zinc-200">
-              {selectedScenario?.affected_component ||
-                "no-active-incident"}
+              {selectedScenario?.affected_component || "no-active-incident"}
             </span>
           </div>
 
           <button
             type="button"
             onClick={() => fetchClusterHealth()}
-            className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-400 transition hover:border-zinc-700 hover:bg-zinc-800 hover:text-zinc-200"
+            disabled={healthLoading}
+            className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-400 transition hover:border-zinc-700 hover:bg-zinc-800 hover:text-zinc-200 disabled:cursor-wait disabled:opacity-70"
           >
-            <RefreshCw className="h-3.5 w-3.5" />
-            Refresh State
+            <RefreshCw
+              className={`h-3.5 w-3.5 ${
+                healthLoading ? "animate-spin" : ""
+              }`}
+            />
+
+            {healthLoading ? "Refreshing..." : "Refresh State"}
           </button>
         </header>
 
         <div className="mx-auto w-full max-w-6xl space-y-8 p-6 md:p-10">
-          {activeTab === "overview" && (
-            <section className="space-y-6">
-              <div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <h2 className="text-lg font-bold tracking-tight">
-                    System Infrastructure Overview
-                  </h2>
-
-                  <span
-                    className={`rounded-full border px-2.5 py-1 font-mono text-[10px] ${modeClasses.badge}`}
-                  >
-                    {modeLabel} ENVIRONMENT
-                  </span>
-                </div>
-
-                <p className="mt-1 text-xs text-zinc-400">
-                  Monitor cluster connectivity, incident scenarios,
-                  and diagnostic capabilities from one control plane.
-                </p>
-              </div>
-
-              <div
-                className={`rounded-xl border p-5 ${modeClasses.border} ${modeClasses.background}`}
-              >
-                <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-                  <div className="flex items-start gap-4">
-                    <div
-                      className={`mt-1 h-3 w-3 shrink-0 rounded-full ${modeClasses.dot} ${
-                        modeLabel === "LIVE"
-                          ? "shadow-[0_0_12px_rgba(52,211,153,0.8)]"
-                          : ""
-                      }`}
-                    />
-
-                    <div>
-                      <div className="flex flex-wrap items-center gap-3">
-                        <h3
-                          className={`text-sm font-bold ${modeClasses.title}`}
-                        >
-                          {environmentCopy.title}
-                        </h3>
-
-                        <span className="rounded border border-zinc-700/70 bg-zinc-950/40 px-2 py-0.5 font-mono text-[10px] text-zinc-400">
-                          {environmentCopy.detail}
-                        </span>
-                      </div>
-
-                      <p className="mt-2 max-w-2xl text-xs leading-relaxed text-zinc-300">
-                        {environmentCopy.description}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="shrink-0 text-left sm:text-right">
-                    <p className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">
-                      Last health check
-                    </p>
-
-                    <p className="mt-1 font-mono text-xs text-zinc-300">
-                      {lastUpdatedLabel}
-                    </p>
-
-                    <p className="mt-1 text-[10px] text-zinc-500">
-                      Automatic refresh every 10 seconds
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <StatCard
-                  title="Kubernetes Nodes"
-                  value={
-                    initialLoading
-                      ? "..."
-                      : clusterHealth?.node_count ?? 0
-                  }
-                  subtitle={
-                    modeLabel === "LIVE"
-                      ? `${clusterHealth?.healthy_nodes ?? 0} nodes Ready`
-                      : modeLabel === "DEMO"
-                        ? "Simulated cluster"
-                        : "No live data"
-                  }
-                  icon={Activity}
-                  iconClass="text-blue-400"
+          {initialLoading ? (
+            <div
+              key="initial-loading"
+              className="animate-tab-in"
+            >
+              <InitialLoadingState
+                backendReady={backendReady}
+              />
+            </div>
+          ) : (
+            <div
+              key={activeTab}
+              className="animate-tab-in"
+            >
+              {activeTab === "overview" && (
+                <OverviewTab
+                  modeLabel={modeLabel}
+                  modeClasses={modeClasses}
+                  environmentCopy={environmentCopy}
+                  clusterHealth={clusterHealth}
+                  scenarios={scenarios}
+                  selectedScenario={selectedScenario}
+                  resolvedIncidentTitle={resolvedIncidentTitle}
+                  lastUpdatedLabel={lastUpdatedLabel}
+                  onOpenLab={() => setActiveTab("lab")}
+                  onOpenAi={() => setActiveTab("ai")}
                 />
-
-                <StatCard
-                  title="Incident Scenarios"
-                  value={scenarios.length}
-                  subtitle="OOMKilled, CrashLoop, Routing"
-                  icon={FlaskConical}
-                  iconClass="text-amber-400"
-                />
-
-                <StatCard
-                  title="Security Engine"
-                  value="Zero-Trust"
-                  subtitle="Server-side allowlist active"
-                  icon={ShieldCheck}
-                  iconClass="text-emerald-400"
-                />
-              </div>
-
-              <div className="space-y-4 rounded-xl border border-zinc-800/80 bg-zinc-900/30 p-5">
-                <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-                  <div>
-                    <h3 className="text-sm font-semibold text-zinc-200">
-                      Active Incident
-                    </h3>
-
-                    <p className="mt-1 text-[11px] text-zinc-500">
-                      The dashboard starts in a healthy state. Select a scenario only when you want to simulate a failure.
-                    </p>
-                  </div>
-
-                  {selectedScenario && (
-                    <button
-                      type="button"
-                      onClick={clearSelectedIncident}
-                      className="self-start rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-[11px] font-medium text-zinc-300 transition hover:bg-zinc-800 hover:text-white sm:self-auto"
-                    >
-                      Clear Incident
-                    </button>
-                  )}
-                </div>
-
-                {selectedScenario ? (
-                  <div className="flex flex-col items-start justify-between gap-4 rounded-lg border border-zinc-800 bg-zinc-950 p-4 sm:flex-row sm:items-center">
-                    <div className="min-w-0 space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs font-semibold">
-                          {selectedScenario.title}
-                        </span>
-
-                        <span className="rounded-full border border-rose-500/20 bg-rose-500/10 px-2 py-0.5 font-mono text-[10px] text-rose-400">
-                          {selectedScenario.severity}
-                        </span>
-                      </div>
-
-                      <p className="max-w-2xl text-xs leading-relaxed text-zinc-400">
-                        {selectedScenario.description}
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab("ai")}
-                      className="flex shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white transition hover:bg-blue-500"
-                    >
-                      Inspect RCA
-                      <ArrowRight className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-dashed border-emerald-500/20 bg-emerald-500/[0.03] p-6">
-                    <div className="flex items-start gap-3">
-                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
-
-                      <div>
-                        <p className="text-xs font-semibold text-emerald-300">
-                          No Active Incident
-                        </p>
-
-                        <p className="mt-1 text-xs leading-relaxed text-zinc-400">
-                          The system is ready and no failure scenario is currently selected. Open the K8s Testing Lab to begin a controlled simulation.
-                        </p>
-
-                        <button
-                          type="button"
-                          onClick={() => setActiveTab("lab")}
-                          className="mt-3 inline-flex items-center gap-2 rounded-lg bg-zinc-800 px-3 py-2 text-[11px] font-medium text-zinc-200 transition hover:bg-zinc-700"
-                        >
-                          Open Testing Lab
-                          <ArrowRight className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {clusterHealth?.message && (
-                <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4 text-xs text-zinc-400">
-                  <span className="font-semibold text-zinc-200">
-                    Environment status:
-                  </span>{" "}
-                  {clusterHealth.message}
-                </div>
               )}
-            </section>
+
+              {activeTab === "lab" && (
+                <LabTab
+                  apiBase={API_BASE}
+                  scenarios={scenarios}
+                  scenariosError={scenariosError}
+                  selectedScenario={selectedScenario}
+                  onRetry={() => fetchScenarios()}
+                  onRunScenario={handleRunScenario}
+                />
+              )}
+
+              {activeTab === "ai" && (
+                <AiTab
+                  selectedScenario={selectedScenario}
+                  resolvedIncidentTitle={resolvedIncidentTitle}
+                  rcaResult={rcaResult}
+                  rcaLoading={rcaLoading}
+                  remediating={remediating}
+                  remediationSuccess={remediationSuccess}
+                  onRunAnalysis={fetchAiRca}
+                  onRemediate={triggerRemediation}
+                />
+              )}
+
+              {activeTab === "terminal" && (
+                <TerminalTab
+                  terminalCmd={terminalCmd}
+                  terminalOutput={terminalOutput}
+                  terminalLoading={terminalLoading}
+                  onCommandChange={setTerminalCmd}
+                  onExecute={executeTerminal}
+                />
+              )}
+            </div>
           )}
+        </div>
+      </main>
+    </div>
+  );
+}
 
-          {activeTab === "lab" && (
-            <section className="space-y-6">
-              <div>
-                <h2 className="text-lg font-bold tracking-tight">
-                  Kubernetes Incident Simulation Lab
-                </h2>
+function InitialLoadingState({ backendReady }) {
+  const isHostedDemo =
+    API_BASE.includes("onrender.com") ||
+    API_BASE.includes("vercel.app");
 
-                <p className="mt-1 text-xs text-zinc-400">
-                  Inject controlled failure scenarios and observe how the diagnostic workflow responds.
-                </p>
+  const loadingTitle = backendReady
+    ? "Loading cluster data..."
+    : isHostedDemo
+      ? "Waking up the Demo backend..."
+      : "Connecting to the local backend...";
+
+  const loadingDescription = isHostedDemo
+    ? "The hosted Demo backend may need a few seconds to wake up. Retrying automatically before showing an error."
+    : "Connecting to the local FastAPI backend and Kubernetes environment. This may take a moment.";
+
+  return (
+    <section className="flex min-h-[560px] items-center justify-center">
+      <div className="w-full max-w-lg space-y-5 rounded-xl border border-zinc-800 bg-zinc-900/40 p-8 text-center">
+        <RefreshCw className="mx-auto h-9 w-9 animate-spin text-blue-400" />
+
+        <div>
+          <h2 className="text-base font-semibold text-zinc-100">
+            {loadingTitle}
+          </h2>
+
+          <p className="mt-2 text-xs leading-relaxed text-zinc-400">
+            {loadingDescription}
+          </p>
+        </div>
+
+        <div className="h-1.5 overflow-hidden rounded-full bg-zinc-800">
+          <div className="h-full w-1/2 animate-pulse rounded-full bg-blue-500" />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function OverviewTab({
+  modeLabel,
+  modeClasses,
+  environmentCopy,
+  clusterHealth,
+  scenarios,
+  selectedScenario,
+  resolvedIncidentTitle,
+  lastUpdatedLabel,
+  onOpenLab,
+  onOpenAi
+}) {
+  return (
+    <section className="space-y-6">
+      <div>
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="text-lg font-bold tracking-tight">
+            System Infrastructure Overview
+          </h2>
+
+          <span
+            className={`rounded-full border px-2.5 py-1 font-mono text-[10px] ${modeClasses.badge}`}
+          >
+            {modeLabel} ENVIRONMENT
+          </span>
+        </div>
+
+        <p className="mt-1 text-xs text-zinc-400">
+          Monitor cluster connectivity, incident state, and diagnostic capabilities from one control plane.
+        </p>
+      </div>
+
+      <div
+        className={`rounded-xl border p-5 ${modeClasses.border} ${modeClasses.background}`}
+      >
+        <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+          <div className="flex items-start gap-4">
+            <div
+              className={`mt-1 h-3 w-3 shrink-0 rounded-full ${modeClasses.dot}`}
+            />
+
+            <div>
+              <div className="flex flex-wrap items-center gap-3">
+                <h3
+                  className={`text-sm font-bold ${modeClasses.title}`}
+                >
+                  {environmentCopy.title}
+                </h3>
+
+                <span className="rounded border border-zinc-700/70 bg-zinc-950/40 px-2 py-0.5 font-mono text-[10px] text-zinc-400">
+                  {environmentCopy.detail}
+                </span>
               </div>
 
-              {!initialLoading &&
-              scenariosError &&
-              scenarios.length === 0 ? (
-                <div className="space-y-3 rounded-xl border border-dashed border-rose-500/30 bg-rose-500/[0.03] p-10 text-center">
-                  <AlertOctagon className="mx-auto h-8 w-8 text-rose-400" />
+              <p className="mt-2 max-w-2xl text-xs leading-relaxed text-zinc-300">
+                {environmentCopy.description}
+              </p>
+            </div>
+          </div>
 
-                  <p className="text-sm font-semibold">
-                    Could not reach the incident backend
-                  </p>
+          <div className="shrink-0 text-left sm:text-right">
+            <p className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">
+              Last health check
+            </p>
 
-                  <p className="mx-auto max-w-md text-xs text-zinc-400">
-                    API endpoint: {API_BASE}
-                  </p>
+            <p className="mt-1 font-mono text-xs text-zinc-300">
+              {lastUpdatedLabel}
+            </p>
+
+            <p className="mt-1 text-[10px] text-zinc-500">
+              Automatic refresh every 10 seconds
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard
+          title="Kubernetes Nodes"
+          value={clusterHealth?.node_count ?? 0}
+          subtitle={
+            modeLabel === "LIVE"
+              ? `${clusterHealth?.healthy_nodes ?? 0} nodes Ready`
+              : modeLabel === "DEMO"
+                ? "Simulated cluster"
+                : "No live data"
+          }
+          icon={Activity}
+          iconClass="text-blue-400"
+        />
+
+        <StatCard
+          title="Incident Scenarios"
+          value={scenarios.length}
+          subtitle="OOMKilled, CrashLoop, Routing"
+          icon={FlaskConical}
+          iconClass="text-amber-400"
+        />
+
+        <StatCard
+          title="Security Engine"
+          value="Zero-Trust"
+          subtitle="Server-side allowlist active"
+          icon={ShieldCheck}
+          iconClass="text-emerald-400"
+        />
+      </div>
+
+      <div className="space-y-4 rounded-xl border border-zinc-800/80 bg-zinc-900/30 p-5">
+        <div>
+          <h3 className="text-sm font-semibold text-zinc-200">
+            Incident State
+          </h3>
+
+          <p className="mt-1 text-[11px] text-zinc-500">
+            Environment status and incident status are tracked separately.
+          </p>
+        </div>
+
+        {resolvedIncidentTitle && !selectedScenario && (
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.03] p-4">
+            <div className="flex items-start gap-3">
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+
+              <div>
+                <p className="text-xs font-semibold text-emerald-300">
+                  Incident Resolved
+                </p>
+
+                <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                  {resolvedIncidentTitle} was remediated successfully. The cluster is ready for another controlled simulation.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {selectedScenario ? (
+          <div className="flex flex-col items-start justify-between gap-4 rounded-lg border border-zinc-800 bg-zinc-950 p-4 sm:flex-row sm:items-center">
+            <div className="min-w-0 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold">
+                  {selectedScenario.title}
+                </span>
+
+                <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 font-mono text-[10px] text-amber-400">
+                  ACTIVE
+                </span>
+
+                <span className="rounded-full border border-rose-500/20 bg-rose-500/10 px-2 py-0.5 font-mono text-[10px] text-rose-400">
+                  FAULT INJECTED
+                </span>
+              </div>
+
+              <p className="max-w-2xl text-xs leading-relaxed text-zinc-400">
+                {selectedScenario.description}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={onOpenAi}
+              className="flex shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white transition hover:bg-blue-500"
+            >
+              Inspect RCA
+              <ArrowRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-emerald-500/20 bg-emerald-500/[0.03] p-6">
+            <div className="flex items-start gap-3">
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+
+              <div>
+                <p className="text-xs font-semibold text-emerald-300">
+                  No Active Incident
+                </p>
+
+                <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                  The system is ready and no failure scenario is currently active. You can run a health analysis or open the Testing Lab.
+                </p>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={onOpenLab}
+                    className="inline-flex items-center gap-2 rounded-lg bg-zinc-800 px-3 py-2 text-[11px] font-medium text-zinc-200 transition hover:bg-zinc-700"
+                  >
+                    Open Testing Lab
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </button>
 
                   <button
                     type="button"
-                    onClick={fetchScenarios}
-                    className="rounded-lg bg-zinc-800 px-4 py-2 text-xs font-medium text-zinc-200 transition hover:bg-zinc-700"
+                    onClick={onOpenAi}
+                    className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 px-3 py-2 text-[11px] font-medium text-zinc-300 transition hover:bg-zinc-800"
                   >
-                    Retry
+                    Run Health Analysis
+                    <BrainCircuit className="h-3.5 w-3.5" />
                   </button>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                  {initialLoading &&
-                    [0, 1, 2].map((item) => (
-                      <div
-                        key={item}
-                        className="h-52 animate-pulse rounded-xl border border-zinc-800 bg-zinc-900/30"
-                      />
-                    ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
-                  {!initialLoading &&
-                    scenarios.map((scenario) => {
-                      const active =
-                        selectedScenario?.id === scenario.id;
+      {clusterHealth?.message && (
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4 text-xs text-zinc-400">
+          <span className="font-semibold text-zinc-200">
+            Environment status:
+          </span>{" "}
+          {clusterHealth.message}
+        </div>
+      )}
+    </section>
+  );
+}
 
-                      return (
-                        <div
-                          key={scenario.id}
-                          className={`flex flex-col justify-between gap-5 rounded-xl border p-5 transition ${
-                            active
-                              ? "border-blue-500/50 bg-zinc-900/80 ring-1 ring-blue-500/20"
-                              : "border-zinc-800/80 bg-zinc-900/30 hover:border-zinc-700"
-                          }`}
-                        >
-                          <div className="space-y-3">
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">
-                                {scenario.category}
-                              </span>
+function LabTab({
+  apiBase,
+  scenarios,
+  scenariosError,
+  selectedScenario,
+  onRetry,
+  onRunScenario
+}) {
+  return (
+    <section className="space-y-6">
+      <div>
+        <h2 className="text-lg font-bold tracking-tight">
+          Kubernetes Incident Simulation Lab
+        </h2>
 
-                              <span className="rounded border border-zinc-700 bg-zinc-800 px-2 py-0.5 font-mono text-[10px] text-zinc-300">
-                                {scenario.severity}
-                              </span>
-                            </div>
+        <p className="mt-1 text-xs text-zinc-400">
+          Inject controlled failure scenarios and observe how the diagnostic workflow responds.
+        </p>
+      </div>
 
-                            <h3 className="text-sm font-semibold">
-                              {scenario.title}
-                            </h3>
+      {scenariosError && scenarios.length === 0 ? (
+        <div className="space-y-3 rounded-xl border border-dashed border-rose-500/30 bg-rose-500/[0.03] p-10 text-center">
+          <AlertOctagon className="mx-auto h-8 w-8 text-rose-400" />
 
-                            <p className="text-xs leading-relaxed text-zinc-400">
-                              {scenario.description}
-                            </p>
-                          </div>
+          <p className="text-sm font-semibold">
+            Could not reach the incident backend
+          </p>
 
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleRunScenario(scenario)
-                            }
-                            className={`flex w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-semibold transition ${
-                              active
-                                ? "bg-blue-600 text-white"
-                                : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
-                            }`}
-                          >
-                            <Zap className="h-3.5 w-3.5" />
+          <p className="mx-auto max-w-md text-xs text-zinc-400">
+            API endpoint: {apiBase}
+          </p>
 
-                            {active
-                              ? "Scenario Active"
-                              : "Trigger Fault"}
-                          </button>
-                        </div>
-                      );
-                    })}
-                </div>
-              )}
-            </section>
-          )}
+          <button
+            type="button"
+            onClick={onRetry}
+            className="rounded-lg bg-zinc-800 px-4 py-2 text-xs font-medium text-zinc-200 transition hover:bg-zinc-700"
+          >
+            Retry
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          {scenarios.map((scenario) => {
+            const active =
+              selectedScenario?.id === scenario.id;
 
-          {activeTab === "ai" && (
-            <section className="space-y-6">
-              <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-                <div>
-                  <h2 className="text-lg font-bold tracking-tight">
-                    AI Telemetry & Root Cause Analysis
-                  </h2>
+            return (
+              <div
+                key={scenario.id}
+                className={`flex flex-col justify-between gap-5 rounded-xl border p-5 transition ${
+                  active
+                    ? "border-blue-500/50 bg-zinc-900/80 ring-1 ring-blue-500/20"
+                    : "border-zinc-800/80 bg-zinc-900/30 hover:border-zinc-700"
+                }`}
+              >
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">
+                      {scenario.category}
+                    </span>
 
-                  <p className="mt-1 text-xs text-zinc-400">
-                    Analyze Kubernetes logs and events, then review a recommended remediation.
+                    <span className="rounded border border-zinc-700 bg-zinc-800 px-2 py-0.5 font-mono text-[10px] text-zinc-300">
+                      {scenario.severity}
+                    </span>
+                  </div>
+
+                  <h3 className="text-sm font-semibold">
+                    {scenario.title}
+                  </h3>
+
+                  <p className="text-xs leading-relaxed text-zinc-400">
+                    {scenario.description}
                   </p>
                 </div>
 
                 <button
                   type="button"
-                  onClick={fetchAiRca}
-                  disabled={rcaLoading || !selectedScenario}
-                  className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={() => onRunScenario(scenario)}
+                  className={`flex w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-semibold transition ${
+                    active
+                      ? "bg-blue-600 text-white"
+                      : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
+                  }`}
                 >
-                  {rcaLoading ? (
-                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <BrainCircuit className="h-3.5 w-3.5" />
-                  )}
+                  <Zap className="h-3.5 w-3.5" />
 
-                  {rcaLoading
-                    ? "Analyzing Telemetry..."
-                    : "Run AI Investigation"}
+                  {active
+                    ? "Scenario Active"
+                    : "Trigger Fault"}
                 </button>
               </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
 
-              {!selectedScenario && (
-                <EmptyState message="No incident is currently selected. Choose a scenario from the K8s Testing Lab to begin an investigation." />
-              )}
+function AiTab({
+  selectedScenario,
+  resolvedIncidentTitle,
+  rcaResult,
+  rcaLoading,
+  remediating,
+  remediationSuccess,
+  onRunAnalysis,
+  onRemediate
+}) {
+  const isResolvedReport =
+    !selectedScenario &&
+    Boolean(resolvedIncidentTitle);
 
-              {selectedScenario && !rcaResult && (
-                <EmptyState message='Click "Run AI Investigation" to analyze the selected incident.' />
-              )}
+  const resultKey = rcaResult
+    ? `${resolvedIncidentTitle || "health"}-${
+        rcaResult.root_cause ||
+        rcaResult.analysis ||
+        rcaResult.status ||
+        "result"
+      }`
+    : "empty";
 
-              {rcaResult && (
-                <div className="space-y-6">
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                    <InfoCard
-                      title="Root Cause Explanation"
-                      value={
-                        rcaResult.root_cause ||
-                        rcaResult.analysis ||
-                        "No root cause returned."
-                      }
-                      icon={AlertOctagon}
-                      color="text-rose-400"
-                    />
+  return (
+    <section className="space-y-6">
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <div>
+          <h2 className="text-lg font-bold tracking-tight">
+            AI Telemetry & Root Cause Analysis
+          </h2>
 
-                    <InfoCard
-                      title="Operational Impact"
-                      value={
-                        rcaResult.impact ||
-                        "No impact description returned."
-                      }
-                      icon={Activity}
-                      color="text-amber-400"
-                    />
+          <p className="mt-1 text-xs text-zinc-400">
+            Analyze a selected incident or verify that the cluster is operating normally.
+          </p>
+        </div>
 
-                    <InfoCard
-                      title="Recommended Fix"
-                      value={
-                        rcaResult.recommended_fix ||
-                        "No remediation recommendation returned."
-                      }
-                      icon={Check}
-                      color="text-emerald-400"
-                    />
-                  </div>
-
-                  <div className="space-y-4 rounded-xl border border-zinc-800/80 bg-zinc-900/30 p-5">
-                    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-                      <div>
-                        <h3 className="text-sm font-semibold">
-                          Manifest Delta
-                        </h3>
-
-                        <p className="mt-1 text-[11px] text-zinc-500">
-                          Faulty state compared with the recommended target state.
-                        </p>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={triggerRemediation}
-                        disabled={
-                          remediating || remediationSuccess
-                        }
-                        className={`flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold transition ${
-                          remediationSuccess
-                            ? "border border-emerald-500/30 bg-emerald-500/20 text-emerald-400"
-                            : "bg-emerald-600 text-white hover:bg-emerald-500"
-                        } disabled:cursor-not-allowed disabled:opacity-70`}
-                      >
-                        {remediationSuccess ? (
-                          <Check className="h-3.5 w-3.5" />
-                        ) : (
-                          <RefreshCw
-                            className={`h-3.5 w-3.5 ${
-                              remediating
-                                ? "animate-spin"
-                                : ""
-                            }`}
-                          />
-                        )}
-
-                        {remediationSuccess
-                          ? "Remediated"
-                          : remediating
-                            ? "Applying Patch..."
-                            : "Apply One-Click Patch"}
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                      <YamlPanel
-                        title="Active Faulty State"
-                        value={selectedScenario.problem_yaml}
-                        color="rose"
-                      />
-
-                      <YamlPanel
-                        title="Recommended Fix Target"
-                        value={selectedScenario.fix_yaml}
-                        color="emerald"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-            </section>
+        <button
+          type="button"
+          onClick={onRunAnalysis}
+          disabled={rcaLoading}
+          className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {rcaLoading ? (
+            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <BrainCircuit className="h-3.5 w-3.5" />
           )}
 
-          {activeTab === "terminal" && (
-            <section className="space-y-6">
-              <div>
-                <h2 className="text-lg font-bold tracking-tight">
-                  Zero-Trust Interactive Terminal
-                </h2>
+          {rcaLoading
+            ? "Analyzing..."
+            : selectedScenario
+              ? "Run AI Investigation"
+              : "Run Health Analysis"}
+        </button>
+      </div>
 
-                <p className="mt-1 text-xs text-zinc-400">
-                  Run approved, read-only Kubernetes inspection commands. The allowlist is enforced by the backend.
-                </p>
-              </div>
+      {!selectedScenario && !rcaResult && (
+        <EmptyState message="No incident is active. You can still run a health analysis to verify that the cluster is operating normally." />
+      )}
 
-              <div className="flex flex-wrap gap-2">
-                {TERMINAL_PRESETS.map((preset) => (
-                  <button
-                    key={preset.command}
-                    type="button"
-                    onClick={() =>
-                      executeTerminal(null, preset.command)
-                    }
-                    className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1.5 font-mono text-[11px] text-zinc-300 transition hover:bg-zinc-800 hover:text-white"
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
+      {isResolvedReport && rcaResult && (
+        <div className="animate-content-in rounded-lg border border-emerald-500/20 bg-emerald-500/[0.03] p-4 text-xs text-emerald-300">
+          The incident was remediated successfully. The health analysis below remains available for review.
+        </div>
+      )}
 
-              <form
-                onSubmit={executeTerminal}
-                className="flex flex-col gap-3 sm:flex-row"
-              >
-                <input
-                  type="text"
-                  value={terminalCmd}
-                  onChange={(event) =>
-                    setTerminalCmd(event.target.value)
-                  }
-                  placeholder="kubectl get pods"
-                  className="min-w-0 flex-1 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2.5 font-mono text-xs text-zinc-100 outline-none transition focus:border-blue-500"
-                />
+      {rcaResult && (
+        <div
+          key={resultKey}
+          className="animate-content-in space-y-6"
+        >
+          {!selectedScenario && !isResolvedReport && (
+            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.03] p-4 text-xs text-emerald-300">
+              Cluster health analysis completed. No active incident is associated with this report.
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <InfoCard
+              title="Root Cause Explanation"
+              value={
+                rcaResult.root_cause ||
+                rcaResult.analysis ||
+                "No root cause returned."
+              }
+              icon={AlertOctagon}
+              color="text-rose-400"
+            />
+
+            <InfoCard
+              title="Operational Impact"
+              value={
+                rcaResult.impact ||
+                "No impact description returned."
+              }
+              icon={Activity}
+              color="text-amber-400"
+            />
+
+            <InfoCard
+              title="Recommended Fix"
+              value={
+                rcaResult.recommended_fix ||
+                "No remediation recommendation returned."
+              }
+              icon={Check}
+              color="text-emerald-400"
+            />
+          </div>
+
+          {selectedScenario && (
+            <div className="space-y-4 rounded-xl border border-zinc-800/80 bg-zinc-900/30 p-5">
+              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                <div>
+                  <h3 className="text-sm font-semibold">
+                    Manifest Delta
+                  </h3>
+
+                  <p className="mt-1 text-[11px] text-zinc-500">
+                    Faulty state compared with the recommended target state.
+                  </p>
+                </div>
 
                 <button
-                  type="submit"
-                  disabled={terminalLoading}
-                  className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-xs font-semibold text-white transition hover:bg-blue-500 disabled:opacity-60"
+                  type="button"
+                  onClick={onRemediate}
+                  disabled={
+                    remediating ||
+                    remediationSuccess
+                  }
+                  className={`flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold transition ${
+                    remediationSuccess
+                      ? "border border-emerald-500/30 bg-emerald-500/20 text-emerald-400"
+                      : "bg-emerald-600 text-white hover:bg-emerald-500"
+                  } disabled:cursor-not-allowed disabled:opacity-70`}
                 >
-                  {terminalLoading && (
-                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  {remediationSuccess ? (
+                    <Check className="h-3.5 w-3.5" />
+                  ) : (
+                    <RefreshCw
+                      className={`h-3.5 w-3.5 ${
+                        remediating ? "animate-spin" : ""
+                      }`}
+                    />
                   )}
 
-                  Execute
+                  {remediationSuccess
+                    ? "Remediated"
+                    : remediating
+                      ? "Applying Patch..."
+                      : "Apply One-Click Patch"}
                 </button>
-              </form>
-
-              <div className="min-h-[320px] overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-950 p-5 font-mono text-xs leading-relaxed text-zinc-300 shadow-inner">
-                <div className="mb-3 flex items-center gap-2 border-b border-zinc-800/80 pb-3 text-[10px] text-zinc-500">
-                  <span className="h-2.5 w-2.5 rounded-full bg-rose-500/80" />
-                  <span className="h-2.5 w-2.5 rounded-full bg-amber-500/80" />
-                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500/80" />
-
-                  <span className="ml-2">
-                    kubectl inspection terminal
-                  </span>
-                </div>
-
-                <pre className="whitespace-pre-wrap break-words">
-                  {terminalOutput ||
-                    "Output will appear here after command execution..."}
-                </pre>
               </div>
-            </section>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <YamlPanel
+                  title="Active Faulty State"
+                  value={selectedScenario.problem_yaml}
+                  color="rose"
+                />
+
+                <YamlPanel
+                  title="Recommended Fix Target"
+                  value={selectedScenario.fix_yaml}
+                  color="emerald"
+                />
+              </div>
+            </div>
           )}
         </div>
-      </main>
-    </div>
+      )}
+    </section>
+  );
+}
+
+function TerminalTab({
+  terminalCmd,
+  terminalOutput,
+  terminalLoading,
+  onCommandChange,
+  onExecute
+}) {
+  return (
+    <section className="space-y-6">
+      <div>
+        <h2 className="text-lg font-bold tracking-tight">
+          Zero-Trust Interactive Terminal
+        </h2>
+
+        <p className="mt-1 text-xs text-zinc-400">
+          Run approved, read-only Kubernetes inspection commands. The allowlist is enforced by the backend.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {TERMINAL_PRESETS.map((preset) => (
+          <button
+            key={preset.command}
+            type="button"
+            onClick={() =>
+              onExecute(null, preset.command)
+            }
+            className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1.5 font-mono text-[11px] text-zinc-300 transition hover:bg-zinc-800 hover:text-white"
+          >
+            {preset.label}
+          </button>
+        ))}
+      </div>
+
+      <form
+        onSubmit={onExecute}
+        className="flex flex-col gap-3 sm:flex-row"
+      >
+        <input
+          type="text"
+          value={terminalCmd}
+          onChange={(event) =>
+            onCommandChange(event.target.value)
+          }
+          placeholder="kubectl get pods"
+          className="min-w-0 flex-1 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2.5 font-mono text-xs text-zinc-100 outline-none transition focus:border-blue-500"
+        />
+
+        <button
+          type="submit"
+          disabled={terminalLoading}
+          className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-xs font-semibold text-white transition hover:bg-blue-500 disabled:opacity-60"
+        >
+          {terminalLoading && (
+            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+          )}
+
+          Execute
+        </button>
+      </form>
+
+      <div className="min-h-[320px] overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-950 p-5 font-mono text-xs leading-relaxed text-zinc-300 shadow-inner">
+        <div className="mb-3 flex items-center gap-2 border-b border-zinc-800/80 pb-3 text-[10px] text-zinc-500">
+          <span className="h-2.5 w-2.5 rounded-full bg-rose-500/80" />
+          <span className="h-2.5 w-2.5 rounded-full bg-amber-500/80" />
+          <span className="h-2.5 w-2.5 rounded-full bg-emerald-500/80" />
+
+          <span className="ml-2">
+            kubectl inspection terminal
+          </span>
+        </div>
+
+        <pre className="whitespace-pre-wrap break-words">
+          {terminalOutput ||
+            "Output will appear here after command execution..."}
+        </pre>
+      </div>
+    </section>
   );
 }
 
@@ -1124,7 +1313,7 @@ function StatCard({
   iconClass
 }) {
   return (
-    <div className="space-y-2 rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-4">
+    <div className="space-y-2 rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-700">
       <div className="flex items-center justify-between text-xs text-zinc-400">
         <span>{title}</span>
         <Icon className={`h-4 w-4 ${iconClass}`} />
@@ -1148,7 +1337,7 @@ function InfoCard({
   color
 }) {
   return (
-    <div className="min-w-0 space-y-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-5">
+    <div className="min-w-0 space-y-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-zinc-700">
       <span
         className={`flex items-center gap-1.5 text-xs font-semibold ${color}`}
       >
@@ -1180,7 +1369,7 @@ function YamlPanel({
 
   return (
     <div
-      className={`min-w-0 overflow-x-auto rounded-lg border bg-zinc-950 p-4 font-mono text-[11px] leading-relaxed ${styles}`}
+      className={`min-w-0 overflow-x-auto rounded-lg border bg-zinc-950 p-4 font-mono text-[11px] leading-relaxed transition-all duration-200 hover:border-zinc-600 ${styles}`}
     >
       <div
         className={`mb-2 text-[10px] font-bold uppercase tracking-wider ${titleColor}`}
@@ -1197,7 +1386,7 @@ function YamlPanel({
 
 function EmptyState({ message }) {
   return (
-    <div className="rounded-xl border border-dashed border-zinc-800 p-12 text-center">
+    <div className="animate-content-in rounded-xl border border-dashed border-zinc-800 p-12 text-center">
       <BrainCircuit className="mx-auto mb-3 h-8 w-8 text-zinc-600" />
 
       <p className="mx-auto max-w-xl text-xs leading-relaxed text-zinc-400">
