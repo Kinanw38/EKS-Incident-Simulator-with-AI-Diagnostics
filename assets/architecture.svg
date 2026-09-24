@@ -1,39 +1,792 @@
-<svg width="100%" viewBox="0 0 680 300" xmlns="http://www.w3.org/2000/svg" role="img" xmlns:c2pa="http://c2pa.org/manifest"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTo2Njc4MWIxOC1mZGYzLTQ1ZmMtOGE2My05YzZmZDI4MzA0MzMAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaHkFxU3fwZ0fkU6Vc6Lbmm4AAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDphY2E2ZmNhZS00MjgzLTQ3ZmUtYmYxZS1jN2Y3YTU2MThmOTlscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNoQDUTvqTxg43cWrjV4MQvCQAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFgg968Qh/VNU3NcMxet9rYaq7RsgI6NpcQ8LnYMDfdQIxSkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaMTh/RcjSYT6ETi6bJHjrM4AAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCDiSqa1qUwvpV2i/OICYCKKuMRtfCX3AEhFttQ7j/mqM2RuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBiVZmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOjY2NzgxYjE4LWZkZjMtNDVmYy04YTYzLTljNmZkMjgzMDQzMy9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjlmZDkxOTgwLWQ3NTEtNDQwNC05NGQwLTI5ZDRiNmFjZDYxYnJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCD3rxCH9U1Tc1wzF632thqrtGyAjo2lxDwudgwN91AjFKJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggJUdWgMQCqPsggMBdTkVtPY2I9BY2hW1Ro3p4ggB+XR6iY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggQH1vgNxiMUz/Zh3Jxyc8N9CDz92TCFkuuerGv+xpNSB0Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQIDxdIL2/FZVtde+GFvm6QiXXoXWFw8mCDT6eZra1B6/zlq7h1wJC8OHK+Y+126F8jBPkGZVHT6xbnBHrouFK+o=</c2pa:manifest></metadata>
-<title>System architecture: hosted app talking to a real or mocked Amazon EKS cluster</title>
-<desc>A hosted web app (dashboard and control API) optionally talks to a live Amazon EKS cluster running injected fault scenarios; in Demo Mode it uses mock data instead.</desc>
-<defs>
-<marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-<path d="M2 1L8 5L2 9" fill="none" stroke="#7c7c74" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-</marker>
-</defs>
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="1400"
+  height="780"
+  viewBox="0 0 1400 780"
+  fill="none"
+>
+  <defs>
+    <linearGradient id="canvas" x1="0" y1="0" x2="1400" y2="780">
+      <stop offset="0%" stop-color="#09090B"/>
+      <stop offset="100%" stop-color="#111827"/>
+    </linearGradient>
 
-<rect x="0" y="0" width="680" height="300" rx="16" fill="#0b0b0d"/>
+    <marker
+      id="arrow-gray"
+      viewBox="0 0 10 10"
+      refX="8"
+      refY="5"
+      markerWidth="7"
+      markerHeight="7"
+      orient="auto"
+    >
+      <path d="M0 0L10 5L0 10Z" fill="#64748B"/>
+    </marker>
 
-<!-- Container 1: Hosted app -->
-<rect x="40" y="30" width="290" height="240" rx="20" fill="#04342c" stroke="#0f6e56" stroke-width="0.5"/>
-<text x="185" y="60" text-anchor="middle" font-family="-apple-system,Segoe UI,sans-serif" font-size="14" font-weight="500" fill="#9fe1cb">Hosted app</text>
-<text x="185" y="78" text-anchor="middle" font-family="-apple-system,Segoe UI,sans-serif" font-size="12" fill="#5dcaa5">Free web host</text>
+    <marker
+      id="arrow-blue"
+      viewBox="0 0 10 10"
+      refX="8"
+      refY="5"
+      markerWidth="7"
+      markerHeight="7"
+      orient="auto"
+    >
+      <path d="M0 0L10 5L0 10Z" fill="#60A5FA"/>
+    </marker>
 
-<rect x="65" y="98" width="240" height="56" rx="12" fill="#18181b" stroke="#3f3f46" stroke-width="0.5"/>
-<text x="185" y="120" text-anchor="middle" font-family="-apple-system,Segoe UI,sans-serif" font-size="14" font-weight="500" fill="#f4f4f5">Dashboard UI</text>
-<text x="185" y="138" text-anchor="middle" font-family="-apple-system,Segoe UI,sans-serif" font-size="12" fill="#a1a1aa">React + Vite</text>
+    <marker
+      id="arrow-green"
+      viewBox="0 0 10 10"
+      refX="8"
+      refY="5"
+      markerWidth="7"
+      markerHeight="7"
+      orient="auto"
+    >
+      <path d="M0 0L10 5L0 10Z" fill="#34D399"/>
+    </marker>
 
-<line x1="185" y1="154" x2="185" y2="166" stroke="#7c7c74" stroke-width="1" marker-end="url(#arrow)"/>
+    <style>
+      .title {
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        font-size: 28px;
+        font-weight: 700;
+        fill: #F4F4F5;
+      }
 
-<rect x="65" y="168" width="240" height="56" rx="12" fill="#18181b" stroke="#3f3f46" stroke-width="0.5"/>
-<text x="185" y="190" text-anchor="middle" font-family="-apple-system,Segoe UI,sans-serif" font-size="14" font-weight="500" fill="#f4f4f5">Control API</text>
-<text x="185" y="208" text-anchor="middle" font-family="-apple-system,Segoe UI,sans-serif" font-size="12" fill="#a1a1aa">FastAPI + RCA engine</text>
+      .subtitle {
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        font-size: 14px;
+        fill: #A1A1AA;
+      }
 
-<!-- Connector between the two containers -->
-<line x1="330" y1="150" x2="349" y2="150" stroke="#7c7c74" stroke-width="1" marker-end="url(#arrow)"/>
+      .section {
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        font-size: 15px;
+        font-weight: 700;
+        fill: #E4E4E7;
+      }
 
-<!-- Container 2: AWS EKS -->
-<rect x="350" y="30" width="290" height="240" rx="20" fill="#4a1b0c" stroke="#993c1d" stroke-width="0.5"/>
-<text x="495" y="60" text-anchor="middle" font-family="-apple-system,Segoe UI,sans-serif" font-size="14" font-weight="500" fill="#f0997b">AWS EKS cluster</text>
-<text x="495" y="78" text-anchor="middle" font-family="-apple-system,Segoe UI,sans-serif" font-size="12" fill="#f5c4b3">Live Kubernetes cluster</text>
+      .card-title {
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        font-size: 15px;
+        font-weight: 700;
+        fill: #F4F4F5;
+      }
 
-<rect x="375" y="130" width="240" height="56" rx="12" fill="#18181b" stroke="#3f3f46" stroke-width="0.5"/>
-<text x="495" y="152" text-anchor="middle" font-family="-apple-system,Segoe UI,sans-serif" font-size="14" font-weight="500" fill="#f4f4f5">Injected pods</text>
-<text x="495" y="170" text-anchor="middle" font-family="-apple-system,Segoe UI,sans-serif" font-size="12" fill="#a1a1aa">3 fault scenarios</text>
+      .card-text {
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        font-size: 12px;
+        fill: #CBD5E1;
+      }
 
+      .label {
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        font-size: 11px;
+        fill: #94A3B8;
+      }
+
+      .mode {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 1.2px;
+      }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect
+    width="1400"
+    height="780"
+    rx="16"
+    fill="url(#canvas)"
+  />
+
+  <rect
+    x="1"
+    y="1"
+    width="1398"
+    height="778"
+    rx="15"
+    stroke="#27272A"
+    stroke-width="2"
+  />
+
+  <!-- Header -->
+  <text x="64" y="62" class="title">
+    EKS Incident Simulator with AI Diagnostics
+  </text>
+
+  <text x="64" y="90" class="subtitle">
+    Incident injection, Kubernetes telemetry, root-cause analysis, and remediation
+  </text>
+
+  <!-- Main request arrows -->
+  <path
+    d="M270 191H350"
+    stroke="#60A5FA"
+    stroke-width="2"
+    marker-end="url(#arrow-blue)"
+  />
+
+  <path
+    d="M630 191H710"
+    stroke="#60A5FA"
+    stroke-width="2"
+    marker-end="url(#arrow-blue)"
+  />
+
+  <!-- Top cards -->
+
+  <!-- User Browser -->
+  <rect
+    x="64"
+    y="130"
+    width="206"
+    height="122"
+    rx="12"
+    fill="#18181B"
+    stroke="#3F3F46"
+    stroke-width="2"
+  />
+
+  <circle
+    cx="91"
+    cy="159"
+    r="8"
+    fill="#60A5FA"
+  />
+
+  <text
+    x="111"
+    y="164"
+    class="card-title"
+  >
+    User Browser
+  </text>
+
+  <text
+    x="88"
+    y="194"
+    class="card-text"
+  >
+    React dashboard
+  </text>
+
+  <text
+    x="88"
+    y="216"
+    class="card-text"
+  >
+    Incident controls
+  </text>
+
+  <text
+    x="88"
+    y="238"
+    class="card-text"
+  >
+    Live status visibility
+  </text>
+
+  <!-- React / Vite Frontend -->
+  <rect
+    x="350"
+    y="130"
+    width="280"
+    height="122"
+    rx="12"
+    fill="#111827"
+    stroke="#2563EB"
+    stroke-width="2"
+  />
+
+  <circle
+    cx="378"
+    cy="159"
+    r="8"
+    fill="#60A5FA"
+  />
+
+  <text
+    x="398"
+    y="164"
+    class="card-title"
+  >
+    React / Vite Frontend
+  </text>
+
+  <text
+    x="378"
+    y="194"
+    class="card-text"
+  >
+    Overview and incident lab
+  </text>
+
+  <text
+    x="378"
+    y="216"
+    class="card-text"
+  >
+    AI RCA and remediation UI
+  </text>
+
+  <text
+    x="378"
+    y="238"
+    class="card-text"
+  >
+    Zero-Trust terminal
+  </text>
+
+  <!-- FastAPI Control Plane -->
+  <rect
+    x="710"
+    y="130"
+    width="280"
+    height="156"
+    rx="12"
+    fill="#172554"
+    stroke="#4F46E5"
+    stroke-width="2"
+  />
+
+  <circle
+    cx="738"
+    cy="159"
+    r="8"
+    fill="#818CF8"
+  />
+
+  <text
+    x="758"
+    y="164"
+    class="card-title"
+  >
+    FastAPI Control Plane
+  </text>
+
+  <text
+    x="738"
+    y="194"
+    class="card-text"
+  >
+    Scenario orchestration
+  </text>
+
+  <text
+    x="738"
+    y="216"
+    class="card-text"
+  >
+    Server-side command allowlist
+  </text>
+
+  <text
+    x="738"
+    y="238"
+    class="card-text"
+  >
+    Telemetry collection
+  </text>
+
+  <text
+    x="738"
+    y="260"
+    class="card-text"
+  >
+    Remediation endpoints
+  </text>
+
+  <!-- RCA Engine -->
+  <rect
+    x="1070"
+    y="130"
+    width="266"
+    height="156"
+    rx="12"
+    fill="#18181B"
+    stroke="#52525B"
+    stroke-width="2"
+  />
+
+  <circle
+    cx="1098"
+    cy="159"
+    r="8"
+    fill="#F59E0B"
+  />
+
+  <text
+    x="1118"
+    y="164"
+    class="card-title"
+  >
+    RCA Engine
+  </text>
+
+  <text
+    x="1098"
+    y="194"
+    class="card-text"
+  >
+    Ollama LLM when available
+  </text>
+
+  <text
+    x="1098"
+    y="216"
+    class="card-text"
+  >
+    Structured JSON analysis
+  </text>
+
+  <text
+    x="1098"
+    y="238"
+    class="card-text"
+  >
+    Deterministic fallback
+  </text>
+
+  <text
+    x="1098"
+    y="260"
+    class="card-text"
+  >
+    Root cause and fix guidance
+  </text>
+
+  <!-- Top flow labels -->
+  <text
+    x="286"
+    y="181"
+    class="label"
+  >
+    HTTPS
+  </text>
+
+  <text
+    x="646"
+    y="181"
+    class="label"
+  >
+    REST API
+  </text>
+
+  <!-- Runtime section -->
+  <text
+    x="64"
+    y="360"
+    class="section"
+  >
+    Runtime Integration
+  </text>
+
+  <line
+    x1="64"
+    y1="377"
+    x2="1336"
+    y2="377"
+    stroke="#27272A"
+    stroke-width="2"
+  />
+
+  <!-- Runtime connection lines -->
+  <!-- Demo uses a separate branch from the left side of FastAPI. -->
+  <!-- Live uses the center branch. The paths do not cross. -->
+
+  <!-- FastAPI to Demo Mode -->
+  <path
+    d="M790 286V315H247V402"
+    stroke="#60A5FA"
+    stroke-width="2"
+    stroke-dasharray="6 6"
+    marker-end="url(#arrow-blue)"
+  />
+
+  <!-- FastAPI to Live Mode -->
+  <path
+    d="M850 286V342H655V402"
+    stroke="#34D399"
+    stroke-width="2"
+    stroke-dasharray="6 6"
+    marker-end="url(#arrow-green)"
+  />
+
+  <!-- Terraform/AWS to RCA Engine -->
+  <path
+    d="M1108 410V330H1203V286"
+    stroke="#64748B"
+    stroke-width="2"
+    stroke-dasharray="6 6"
+    marker-end="url(#arrow-gray)"
+  />
+
+  <!-- Connection labels -->
+  <text
+    x="300"
+    y="303"
+    class="label"
+  >
+    demo provider
+  </text>
+
+  <text
+    x="680"
+    y="330"
+    class="label"
+  >
+    live adapter
+  </text>
+
+  <text
+    x="1132"
+    y="322"
+    class="label"
+  >
+    telemetry
+  </text>
+
+  <!-- Demo Mode -->
+  <rect
+    x="64"
+    y="410"
+    width="366"
+    height="176"
+    rx="12"
+    fill="#172554"
+    stroke="#3B82F6"
+    stroke-width="2"
+  />
+
+  <text
+    x="90"
+    y="430"
+    class="mode"
+    fill="#93C5FD"
+  >
+    DEMO MODE
+  </text>
+
+  <text
+    x="90"
+    y="462"
+    class="card-title"
+  >
+    Public Hosted Demo
+  </text>
+
+  <text
+    x="90"
+    y="494"
+    class="card-text"
+  >
+    Vercel frontend + Render backend
+  </text>
+
+  <text
+    x="90"
+    y="518"
+    class="card-text"
+  >
+    Deterministic mock responses
+  </text>
+
+  <text
+    x="90"
+    y="542"
+    class="card-text"
+  >
+    No AWS credentials required
+  </text>
+
+  <text
+    x="90"
+    y="566"
+    class="card-text"
+  >
+    No real cluster resources modified
+  </text>
+
+  <!-- Live Mode -->
+  <rect
+    x="472"
+    y="410"
+    width="366"
+    height="176"
+    rx="12"
+    fill="#052E2B"
+    stroke="#10B981"
+    stroke-width="2"
+  />
+
+  <text
+    x="498"
+    y="430"
+    class="mode"
+    fill="#6EE7B7"
+  >
+    LIVE MODE
+  </text>
+
+  <text
+    x="498"
+    y="462"
+    class="card-title"
+  >
+    AWS / EKS Integration
+  </text>
+
+  <text
+    x="498"
+    y="494"
+    class="card-text"
+  >
+    Local kubeconfig or in-cluster access
+  </text>
+
+  <text
+    x="498"
+    y="518"
+    class="card-text"
+  >
+    Real pods, nodes, logs, and events
+  </text>
+
+  <text
+    x="498"
+    y="542"
+    class="card-text"
+  >
+    Fault manifests applied to Kubernetes
+  </text>
+
+  <text
+    x="498"
+    y="566"
+    class="card-text"
+  >
+    Remediation applied to live workloads
+  </text>
+
+  <!-- Infrastructure -->
+  <rect
+    x="880"
+    y="410"
+    width="456"
+    height="176"
+    rx="12"
+    fill="#18181B"
+    stroke="#D97706"
+    stroke-width="2"
+  />
+
+  <text
+    x="906"
+    y="430"
+    class="mode"
+    fill="#FBBF24"
+  >
+    INFRASTRUCTURE
+  </text>
+
+  <text
+    x="906"
+    y="462"
+    class="card-title"
+  >
+    Terraform-managed AWS
+  </text>
+
+  <text
+    x="906"
+    y="494"
+    class="card-text"
+  >
+    VPC networking and security groups
+  </text>
+
+  <text
+    x="906"
+    y="518"
+    class="card-text"
+  >
+    Amazon EKS control plane and worker nodes
+  </text>
+
+  <text
+    x="906"
+    y="542"
+    class="card-text"
+  >
+    Kubernetes workloads and incident manifests
+  </text>
+
+  <text
+    x="906"
+    y="566"
+    class="card-text"
+  >
+    Lifecycle controlled by setup and destroy scripts
+  </text>
+
+  <!-- Shared workflow -->
+  <text
+    x="64"
+    y="635"
+    class="section"
+  >
+    Shared Incident-Response Workflow
+  </text>
+
+  <line
+    x1="64"
+    y1="652"
+    x2="1336"
+    y2="652"
+    stroke="#27272A"
+    stroke-width="2"
+  />
+
+  <!-- Workflow arrows -->
+  <path
+    d="M300 710H360"
+    stroke="#64748B"
+    stroke-width="2"
+    marker-end="url(#arrow-gray)"
+  />
+
+  <path
+    d="M600 710H660"
+    stroke="#64748B"
+    stroke-width="2"
+    marker-end="url(#arrow-gray)"
+  />
+
+  <path
+    d="M900 710H960"
+    stroke="#64748B"
+    stroke-width="2"
+    marker-end="url(#arrow-gray)"
+  />
+
+  <!-- Fault Scenario -->
+  <rect
+    x="64"
+    y="680"
+    width="236"
+    height="60"
+    rx="10"
+    fill="#27272A"
+    stroke="#52525B"
+  />
+
+  <text
+    x="182"
+    y="701"
+    text-anchor="middle"
+    class="card-title"
+  >
+    Fault Scenario
+  </text>
+
+  <text
+    x="182"
+    y="720"
+    text-anchor="middle"
+    class="label"
+  >
+    OOM / CrashLoop / Routing
+  </text>
+
+  <!-- Telemetry -->
+  <rect
+    x="360"
+    y="680"
+    width="240"
+    height="60"
+    rx="10"
+    fill="#27272A"
+    stroke="#52525B"
+  />
+
+  <text
+    x="480"
+    y="701"
+    text-anchor="middle"
+    class="card-title"
+  >
+    Telemetry
+  </text>
+
+  <text
+    x="480"
+    y="720"
+    text-anchor="middle"
+    class="label"
+  >
+    Logs / events / workload state
+  </text>
+
+  <!-- Diagnosis -->
+  <rect
+    x="660"
+    y="680"
+    width="240"
+    height="60"
+    rx="10"
+    fill="#27272A"
+    stroke="#52525B"
+  />
+
+  <text
+    x="780"
+    y="701"
+    text-anchor="middle"
+    class="card-title"
+  >
+    Diagnosis
+  </text>
+
+  <text
+    x="780"
+    y="720"
+    text-anchor="middle"
+    class="label"
+  >
+    Ollama or expert fallback
+  </text>
+
+  <!-- Remediation -->
+  <rect
+    x="960"
+    y="680"
+    width="240"
+    height="60"
+    rx="10"
+    fill="#27272A"
+    stroke="#52525B"
+  />
+
+  <text
+    x="1080"
+    y="701"
+    text-anchor="middle"
+    class="card-title"
+  >
+    Remediation
+  </text>
+
+  <text
+    x="1080"
+    y="720"
+    text-anchor="middle"
+    class="label"
+  >
+    Fix manifest and reconcile
+  </text>
 </svg>
