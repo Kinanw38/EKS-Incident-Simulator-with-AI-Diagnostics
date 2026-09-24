@@ -1,31 +1,48 @@
+import os
 import time
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from .security import is_command_allowed
-from .scenarios import SCENARIOS
 from .k8s_client import k8s_manager
 from .rca_engine import analyze_incident_telemetry
+from .scenarios import SCENARIOS
+from .security import is_command_allowed
 
 
 app = FastAPI(
     title="AI Incident Simulator Control Plane",
     version="1.0.0",
-    description="Backend API for managing EKS chaos scenarios, telemetry analysis, and automated remediation."
+    description=(
+        "Backend API for managing Kubernetes incident scenarios, "
+        "live telemetry analysis, secure inspection commands, "
+        "and automated remediation."
+    ),
 )
 
 
-# Enable CORS for Frontend communication.
-# allow_credentials is False because this API uses no cookies or
-# Authorization headers - combining it with a wildcard origin is both
-# unnecessary and rejected by browsers per the CORS spec.
+# In Demo Mode the hosted frontend is allowed to communicate with Render.
+# In local development, localhost origins are also allowed.
+allowed_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        "ALLOWED_ORIGINS",
+        (
+            "http://localhost:3000,"
+            "http://localhost:5173,"
+            "https://eks-incident-simulator-ai-diagnosti.vercel.app"
+        ),
+    ).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
     allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type"],
 )
 
 
@@ -37,6 +54,16 @@ class RemediationRequest(BaseModel):
     incident_id: str
 
 
+@app.get("/")
+def root():
+    return {
+        "service": "AI Incident Simulator Control Plane",
+        "status": "running",
+        "mode": k8s_manager.mode,
+        "docs": "/docs",
+    }
+
+
 @app.get("/api/health")
 def health_check():
     cluster_info = k8s_manager.get_cluster_status()
@@ -44,7 +71,8 @@ def health_check():
     return {
         "status": "healthy",
         "timestamp": time.time(),
-        "cluster": cluster_info
+        "mode": k8s_manager.mode,
+        "cluster": cluster_info,
     }
 
 
@@ -55,28 +83,32 @@ def list_scenarios():
 
 @app.get("/api/scenarios/{incident_id}")
 def get_scenario(incident_id: str):
-    if incident_id not in SCENARIOS:
+    scenario = SCENARIOS.get(incident_id)
+
+    if scenario is None:
         raise HTTPException(
             status_code=404,
-            detail="Incident scenario not found."
+            detail="Incident scenario not found.",
         )
 
-    return SCENARIOS[incident_id]
+    return scenario
 
 
 @app.post("/api/scenarios/{incident_id}/trigger")
 def trigger_scenario(incident_id: str):
     """
-    Triggers the selected incident by applying its problem YAML
-    to the Kubernetes cluster.
+    Apply the faulty manifest for the selected incident.
+
+    In Demo Mode, the operation is simulated.
+    In Live Mode, the manifest is applied to the connected Kubernetes cluster.
     """
-    if incident_id not in SCENARIOS:
+    scenario = SCENARIOS.get(incident_id)
+
+    if scenario is None:
         raise HTTPException(
             status_code=404,
-            detail="Incident scenario not found."
+            detail="Incident scenario not found.",
         )
-
-    scenario = SCENARIOS[incident_id]
 
     try:
         result = k8s_manager.apply_manifest(
@@ -86,14 +118,18 @@ def trigger_scenario(incident_id: str):
         return {
             "incident_id": incident_id,
             "status": "ACTIVE",
-            "message": result
+            "mode": k8s_manager.mode,
+            "message": result,
         }
 
-    except Exception as e:
+    except Exception as exc:
         raise HTTPException(
-            status_code=500,
-            detail=str(e)
-        )
+            status_code=503,
+            detail=(
+                "Could not trigger the incident in the connected "
+                f"Kubernetes environment: {exc}"
+            ),
+        ) from exc
 
 
 @app.post("/api/terminal/execute")
@@ -103,84 +139,124 @@ def execute_terminal_command(req: TerminalRequest):
     if not allowed:
         raise HTTPException(
             status_code=403,
-            detail=message
+            detail=message,
         )
 
-    output = k8s_manager.execute_terminal_cmd(req.command)
+    try:
+        output = k8s_manager.execute_terminal_cmd(req.command)
 
-    return {
-        "command": req.command,
-        "output": output
-    }
+        return {
+            "command": req.command,
+            "mode": k8s_manager.mode,
+            "output": output,
+        }
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Command execution failed: {exc}",
+        ) from exc
 
 
 @app.get("/api/scenarios/{incident_id}/rca")
 def get_rca(incident_id: str):
-    if incident_id not in SCENARIOS:
+    """
+    Collect telemetry for the selected component and generate an RCA.
+
+    Live Mode uses real Kubernetes logs and events.
+    Demo Mode uses deterministic simulated telemetry.
+    """
+    scenario = SCENARIOS.get(incident_id)
+
+    if scenario is None:
         raise HTTPException(
             status_code=404,
-            detail="Incident scenario not found."
+            detail="Incident scenario not found.",
         )
 
-    scenario = SCENARIOS[incident_id]
-    component = scenario.get("affected_component", "api-service")
+    component = scenario.get(
+        "affected_component",
+        "api-service",
+    )
 
-    # Fetch dynamic live telemetry directly from the EKS cluster
-    logs, events = k8s_manager.get_telemetry_for_component(component)
+    logs, events = k8s_manager.get_telemetry_for_component(
+        component
+    )
 
-    return analyze_incident_telemetry(
+    analysis = analyze_incident_telemetry(
         incident_id,
         logs,
-        events
+        events,
     )
+
+    return {
+        **analysis,
+        "mode": k8s_manager.mode,
+        "incident_id": incident_id,
+    }
 
 
 @app.post("/api/remediate")
 def trigger_remediation(req: RemediationRequest):
-    if req.incident_id not in SCENARIOS:
+    """
+    Apply the fix manifest for the selected incident.
+
+    In Demo Mode, this operation is simulated.
+    In Live Mode, the fix is applied to Kubernetes.
+    """
+    scenario = SCENARIOS.get(req.incident_id)
+
+    if scenario is None:
         raise HTTPException(
             status_code=404,
-            detail="Incident scenario not found."
+            detail="Incident scenario not found.",
         )
 
-    scenario = SCENARIOS[req.incident_id]
-
     try:
-        # Apply the fix manifest directly to the connected EKS cluster
-        result = k8s_manager.apply_manifest(scenario["fix_yaml"])
+        result = k8s_manager.apply_manifest(
+            scenario["fix_yaml"]
+        )
 
         reconciliation_steps = [
             {
                 "step": 1,
                 "action": "Inspecting current state manifest...",
-                "status": "COMPLETED"
+                "status": "COMPLETED",
             },
             {
                 "step": 2,
                 "action": "Generating YAML Patch delta...",
-                "status": "COMPLETED"
+                "status": "COMPLETED",
             },
             {
                 "step": 3,
-                "action": "Applying Kubernetes live patch to cluster...",
-                "status": "COMPLETED"
+                "action": (
+                    "Applying Kubernetes remediation manifest..."
+                ),
+                "status": "COMPLETED",
             },
             {
                 "step": 4,
-                "action": "Verifying Pod Readiness & Liveness probes...",
-                "status": "COMPLETED"
-            }
+                "action": (
+                    "Verifying Pod Readiness and Liveness probes..."
+                ),
+                "status": "COMPLETED",
+            },
         ]
 
         return {
             "incident_id": req.incident_id,
             "status": "RESOLVED",
+            "mode": k8s_manager.mode,
             "reconciliation_loop": reconciliation_steps,
-            "message": f"Remediation patch successfully reconciled! ({result})"
+            "message": (
+                "Remediation completed successfully. "
+                f"({result})"
+            ),
         }
 
-    except Exception as e:
+    except Exception as exc:
         raise HTTPException(
-            status_code=500,
-            detail=f"Remediation execution failed: {str(e)}"
-        )
+            status_code=503,
+            detail=f"Remediation execution failed: {exc}",
+        ) from exc

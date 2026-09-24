@@ -1,36 +1,71 @@
 import re
 
-# Strict Regex Allowlist for Terminal Command Execution
+
+# Only read-only Kubernetes inspection commands are allowed.
+# These commands are intentionally limited to the operations
+# required by the dashboard terminal.
 ALLOWED_PATTERNS = [
     r"^kubectl get (pods|services|endpoints|deployments|events|nodes)( -n [a-zA-Z0-9-]+)?$",
     r"^kubectl describe (pod|service|deployment|node) [a-zA-Z0-9-]+( -n [a-zA-Z0-9-]+)?$",
     r"^kubectl logs [a-zA-Z0-9-]+( --tail=[0-9]+)?( -n [a-zA-Z0-9-]+)?$",
     r"^kubectl cluster-info$",
-    r"^kubectl version --short$"
+    r"^kubectl version --short$",
 ]
 
-# Characters strictly forbidden to prevent Command Injection
-FORBIDDEN_CHARS = [";", "&&", "||", "|", "`", "$", ">", "<", "\n", "\\"]
+
+# Shell operators and characters that must never be accepted.
+FORBIDDEN_CHARS = [
+    ";",
+    "&&",
+    "||",
+    "|",
+    "`",
+    "$",
+    ">",
+    "<",
+    "\n",
+    "\r",
+    "\\",
+]
 
 
 def is_command_allowed(command: str) -> tuple[bool, str]:
     """
-    Validates user input command against security constraints.
-    Returns (is_valid, reason).
-    """
-    cmd_str = command.strip()
+    Validate a terminal command against the server-side allowlist.
 
-    if not cmd_str:
+    Returns:
+        tuple[bool, str]:
+            Whether the command is allowed and an explanatory message.
+    """
+    if not isinstance(command, str):
+        return False, "Command must be a string."
+
+    command_text = command.strip()
+
+    if not command_text:
         return False, "Empty command provided."
 
-    # Check for forbidden execution operators
-    for char in FORBIDDEN_CHARS:
-        if char in cmd_str:
-            return False, f"Security Violation: Operator '{char}' is forbidden."
+    if len(command_text) > 200:
+        return False, "Command is too long."
 
-    # Validate against pattern allowlist
+    for forbidden_character in FORBIDDEN_CHARS:
+        if forbidden_character in command_text:
+            return (
+                False,
+                (
+                    "Security violation: forbidden shell operator "
+                    f"'{forbidden_character}' detected."
+                ),
+            )
+
     for pattern in ALLOWED_PATTERNS:
-        if re.match(pattern, cmd_str):
+        if re.fullmatch(pattern, command_text):
             return True, "Command authorized."
 
-    return False, "Security Violation: Command not found in Zero Trust Allowlist."
+    return (
+        False,
+        (
+            "Security violation: command is not included "
+            "in the Zero-Trust allowlist."
+        ),
+    )

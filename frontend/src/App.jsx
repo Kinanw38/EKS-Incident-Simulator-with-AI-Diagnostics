@@ -1,45 +1,157 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from "react";
 import {
-  LayoutDashboard,
-  FlaskConical,
-  BrainCircuit,
-  Terminal as TerminalIcon,
-  ShieldCheck,
   Activity,
-  CheckCircle2,
   AlertOctagon,
-  RefreshCw,
   ArrowRight,
-  Zap,
-  Check
-} from 'lucide-react';
-import ToastContainer from './components/Notifications';
+  BrainCircuit,
+  Check,
+  FlaskConical,
+  LayoutDashboard,
+  RefreshCw,
+  ShieldCheck,
+  Terminal as TerminalIcon,
+  Zap
+} from "lucide-react";
+import ToastContainer from "./components/Notifications";
 
-// In production (Vercel/Netlify), set VITE_API_URL to your deployed backend's URL.
-// Locally, it falls back to localhost so nothing changes for local development.
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+const API_BASE =
+  import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+
+const HEALTH_REFRESH_INTERVAL = 10000;
+
+const TERMINAL_PRESETS = [
+  {
+    label: "Get Pods",
+    command: "kubectl get pods"
+  },
+  {
+    label: "Get Services",
+    command: "kubectl get services"
+  },
+  {
+    label: "Get Events",
+    command: "kubectl get events"
+  },
+  {
+    label: "Get Deployments",
+    command: "kubectl get deployments"
+  },
+  {
+    label: "Get Nodes",
+    command: "kubectl get nodes"
+  },
+  {
+    label: "Cluster Info",
+    command: "kubectl cluster-info"
+  }
+];
+
+function getModeLabel(clusterHealth) {
+  if (
+    clusterHealth?.mode === "live" &&
+    clusterHealth?.connected
+  ) {
+    return "LIVE";
+  }
+
+  if (clusterHealth?.mode === "demo") {
+    return "DEMO";
+  }
+
+  return "OFFLINE";
+}
+
+function getModeClasses(clusterHealth) {
+  const mode = getModeLabel(clusterHealth);
+
+  if (mode === "LIVE") {
+    return {
+      badge:
+        "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+      dot: "bg-emerald-400",
+      border: "border-emerald-500/30",
+      background: "bg-emerald-500/[0.04]",
+      title: "text-emerald-300"
+    };
+  }
+
+  if (mode === "DEMO") {
+    return {
+      badge:
+        "bg-blue-500/10 text-blue-400 border-blue-500/20",
+      dot: "bg-blue-400",
+      border: "border-blue-500/30",
+      background: "bg-blue-500/[0.04]",
+      title: "text-blue-300"
+    };
+  }
+
+  return {
+    badge:
+      "bg-rose-500/10 text-rose-400 border-rose-500/20",
+    dot: "bg-rose-400",
+    border: "border-rose-500/30",
+    background: "bg-rose-500/[0.04]",
+    title: "text-rose-300"
+  };
+}
+
+function getEnvironmentCopy(modeLabel) {
+  if (modeLabel === "LIVE") {
+    return {
+      title: "Live AWS / EKS Environment",
+      description:
+        "Connected to a real Kubernetes cluster with live node and workload telemetry.",
+      detail: "Real Kubernetes data enabled"
+    };
+  }
+
+  if (modeLabel === "DEMO") {
+    return {
+      title: "Public Demo Environment",
+      description:
+        "Using deterministic simulated Kubernetes responses. No AWS resources are connected.",
+      detail: "Mock telemetry enabled"
+    };
+  }
+
+  return {
+    title: "Environment Unavailable",
+    description:
+      "The application could not reach the backend or the live Kubernetes cluster.",
+    detail: "Waiting for a connection"
+  };
+}
 
 export default function App() {
   const [activeTab, setActiveTab] = useState("overview");
   const [scenarios, setScenarios] = useState([]);
   const [selectedScenario, setSelectedScenario] = useState(null);
   const [clusterHealth, setClusterHealth] = useState(null);
+  const [lastHealthUpdate, setLastHealthUpdate] = useState(null);
   const [rcaResult, setRcaResult] = useState(null);
   const [rcaLoading, setRcaLoading] = useState(false);
   const [remediating, setRemediating] = useState(false);
-  const [remediationSuccess, setRemediationSuccess] = useState(false);
-  const [terminalCmd, setTerminalCmd] = useState("kubectl get pods");
+  const [remediationSuccess, setRemediationSuccess] =
+    useState(false);
+  const [terminalCmd, setTerminalCmd] =
+    useState("kubectl get pods");
   const [terminalOutput, setTerminalOutput] = useState("");
+  const [terminalLoading, setTerminalLoading] =
+    useState(false);
   const [toasts, setToasts] = useState([]);
-  const [initialLoading, setInitialLoading] = useState(true);
-  const [scenariosError, setScenariosError] = useState(false);
+  const [initialLoading, setInitialLoading] =
+    useState(true);
+  const [scenariosError, setScenariosError] =
+    useState(false);
 
-  // Toast Helper
+  const healthRequestInFlight = useRef(false);
+
   const addToast = (type, title, message) => {
-    const id = Date.now();
+    const id = Date.now() + Math.random();
 
-    setToasts(prev => [
-      ...prev,
+    setToasts((previous) => [
+      ...previous,
       {
         id,
         type,
@@ -48,76 +160,127 @@ export default function App() {
       }
     ]);
 
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
-    }, 4000);
+    window.setTimeout(() => {
+      setToasts((previous) =>
+        previous.filter((toast) => toast.id !== id)
+      );
+    }, 4500);
   };
 
   const removeToast = (id) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
+    setToasts((previous) =>
+      previous.filter((toast) => toast.id !== id)
+    );
   };
 
-  // Fetch initial cluster health & scenarios
-  useEffect(() => {
-    Promise.all([fetchClusterHealth(), fetchScenarios()]).finally(() => {
-      setInitialLoading(false);
-    });
-  }, []);
+  const fetchClusterHealth = async ({ silent = false } = {}) => {
+    if (healthRequestInFlight.current) {
+      return;
+    }
 
-  const fetchClusterHealth = async () => {
+    healthRequestInFlight.current = true;
+
     try {
-      const res = await fetch(`${API_BASE}/health`);
-      const data = await res.json();
+      const response = await fetch(`${API_BASE}/health`);
+
+      if (!response.ok) {
+        throw new Error(
+          `Health request failed with status ${response.status}`
+        );
+      }
+
+      const data = await response.json();
 
       setClusterHealth(data.cluster);
-    } catch {
+      setLastHealthUpdate(new Date());
+    } catch (error) {
       setClusterHealth({
-        status: "DEMO_MODE",
+        status: "UNAVAILABLE",
+        mode: "unavailable",
         connected: false,
-        node_count: 2,
-        healthy_nodes: 2
+        node_count: 0,
+        healthy_nodes: 0,
+        message:
+          "Backend or Kubernetes connection is unavailable."
       });
+
+      if (!silent) {
+        addToast(
+          "error",
+          "Backend Unavailable",
+          error.message ||
+            "Could not read backend health."
+        );
+      }
+    } finally {
+      healthRequestInFlight.current = false;
     }
   };
 
   const fetchScenarios = async () => {
     try {
-      const res = await fetch(`${API_BASE}/scenarios`);
-      const data = await res.json();
+      const response = await fetch(`${API_BASE}/scenarios`);
+
+      if (!response.ok) {
+        throw new Error(
+          `Scenario request failed with status ${response.status}`
+        );
+      }
+
+      const data = await response.json();
 
       setScenarios(data);
       setScenariosError(false);
 
-      if (data.length > 0) {
-        setSelectedScenario(data[0]);
-      }
-    } catch {
+      // Intentionally do not select the first scenario.
+      // The dashboard should start with no active incident.
+    } catch (error) {
       setScenariosError(true);
+
       addToast(
         "error",
         "API Connection Failed",
-        "Could not load incident scenarios from backend."
+        error.message ||
+          "Could not load incident scenarios."
       );
     }
   };
 
-  // Trigger the selected incident in Kubernetes
-  const handleRunScenario = async (sc) => {
-    setSelectedScenario(sc);
+  useEffect(() => {
+    Promise.all([
+      fetchClusterHealth(),
+      fetchScenarios()
+    ]).finally(() => {
+      setInitialLoading(false);
+    });
+  }, []);
+
+  useEffect(() => {
+    const healthInterval = window.setInterval(() => {
+      fetchClusterHealth({ silent: true });
+    }, HEALTH_REFRESH_INTERVAL);
+
+    return () => {
+      window.clearInterval(healthInterval);
+    };
+  }, []);
+
+  const handleRunScenario = async (scenario) => {
+    setSelectedScenario(scenario);
     setRcaResult(null);
     setRemediationSuccess(false);
 
     try {
-      const res = await fetch(
-        `${API_BASE}/scenarios/${sc.id}/trigger`,
+      const response = await fetch(
+        `${API_BASE}/scenarios/${scenario.id}/trigger`,
         {
           method: "POST"
         }
       );
 
-      const data = await res.json();
+      const data = await response.json();
 
-      if (!res.ok) {
+      if (!response.ok) {
         throw new Error(
           data.detail || "Failed to trigger incident."
         );
@@ -126,30 +289,43 @@ export default function App() {
       addToast(
         "warning",
         "Incident Triggered",
-        `${sc.title} is now active in Kubernetes.`
+        `${scenario.title} is active in ${
+          data.mode || "the selected environment"
+        }.`
       );
+
+      await fetchClusterHealth();
     } catch (error) {
       addToast(
         "error",
         "Incident Trigger Failed",
-        error.message || "Could not trigger the Kubernetes incident."
+        error.message ||
+          "Could not trigger the incident."
       );
     }
   };
 
+  const clearSelectedIncident = () => {
+    setSelectedScenario(null);
+    setRcaResult(null);
+    setRemediationSuccess(false);
+  };
+
   const fetchAiRca = async () => {
-    if (!selectedScenario) return;
+    if (!selectedScenario) {
+      return;
+    }
 
     setRcaLoading(true);
 
     try {
-      const res = await fetch(
+      const response = await fetch(
         `${API_BASE}/scenarios/${selectedScenario.id}/rca`
       );
 
-      const data = await res.json();
+      const data = await response.json();
 
-      if (!res.ok) {
+      if (!response.ok) {
         throw new Error(
           data.detail || "Unable to analyze telemetry."
         );
@@ -159,14 +335,17 @@ export default function App() {
 
       addToast(
         "info",
-        "AI Analysis Complete",
-        `Root cause generated via ${data.source || 'Engine'}`
+        "Analysis Complete",
+        `RCA generated via ${
+          data.source || "the diagnostic engine"
+        }.`
       );
-} catch (error) {
+    } catch (error) {
       addToast(
         "error",
         "RCA Failed",
-        error.message || "Unable to analyze telemetry."
+        error.message ||
+          "Unable to analyze telemetry."
       );
     } finally {
       setRcaLoading(false);
@@ -174,748 +353,856 @@ export default function App() {
   };
 
   const triggerRemediation = async () => {
-    if (!selectedScenario) return;
+    if (!selectedScenario) {
+      return;
+    }
 
     setRemediating(true);
 
     try {
-      const res = await fetch(`${API_BASE}/remediate`, {
-        method: 'POST',
+      const response = await fetch(`${API_BASE}/remediate`, {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json'
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
           incident_id: selectedScenario.id
         })
       });
 
-      const data = await res.json();
+      const data = await response.json();
 
-      if (res.ok) {
-        setRemediationSuccess(true);
-
-        addToast(
-          "success",
-          "Remediation Successful",
-          data.message || "Patch reconciled and workload recovered!"
-        );
-      } else {
+      if (!response.ok) {
         throw new Error(
-          data.detail || "Could not apply YAML patch."
+          data.detail || "Could not apply remediation."
         );
       }
+
+      setRemediationSuccess(true);
+
+      addToast(
+        "success",
+        "Remediation Successful",
+        data.message ||
+          "The remediation completed successfully."
+      );
+
+      await fetchClusterHealth();
     } catch (error) {
       addToast(
         "error",
         "Remediation Failed",
-        error.message || "Could not apply YAML patch."
+        error.message ||
+          "Could not apply remediation."
       );
     } finally {
       setRemediating(false);
     }
   };
 
-  const executeTerminal = async (e) => {
-    e.preventDefault();
+  const executeTerminal = async (
+    event = null,
+    commandOverride = null
+  ) => {
+    if (event) {
+      event.preventDefault();
+    }
+
+    const command = commandOverride || terminalCmd;
+
+    setTerminalCmd(command);
+    setTerminalLoading(true);
 
     try {
-      const res = await fetch(`${API_BASE}/terminal/execute`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          command: terminalCmd
-        })
-      });
+      const response = await fetch(
+        `${API_BASE}/terminal/execute`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            command
+          })
+        }
+      );
 
-      const data = await res.json();
+      const data = await response.json();
 
-      if (res.ok) {
-        setTerminalOutput(data.output);
-      } else {
+      if (!response.ok) {
+        const detail =
+          data.detail || "Command was rejected.";
+
         setTerminalOutput(
-          `[SECURITY BLOCK]: ${data.detail}`
+          `[COMMAND ERROR]\n${detail}`
         );
 
         addToast(
           "error",
-          "Command Blocked",
-          data.detail
+          "Command Failed",
+          detail
         );
+
+        return;
       }
-    } catch {
+
       setTerminalOutput(
-        "Error connecting to command processor."
+        `[${String(
+          data.mode || "unknown"
+        ).toUpperCase()} OUTPUT]\n${data.output}`
       );
+    } catch (error) {
+      setTerminalOutput(
+        "[CONNECTION ERROR]\nCould not connect to the terminal API."
+      );
+
+      addToast(
+        "error",
+        "Terminal Unavailable",
+        error.message ||
+          "Could not connect to backend."
+      );
+    } finally {
+      setTerminalLoading(false);
     }
   };
 
-  return (
-    <div className="flex h-screen bg-zinc-950 text-zinc-100 overflow-hidden font-sans">
+  const modeLabel = getModeLabel(clusterHealth);
+  const modeClasses = getModeClasses(clusterHealth);
+  const environmentCopy = getEnvironmentCopy(modeLabel);
 
+  const lastUpdatedLabel = lastHealthUpdate
+    ? lastHealthUpdate.toLocaleTimeString()
+    : "Waiting for first check";
+
+  const navigationItems = [
+    {
+      id: "overview",
+      label: "System Overview",
+      icon: LayoutDashboard
+    },
+    {
+      id: "lab",
+      label: "K8s Testing Lab",
+      icon: FlaskConical
+    },
+    {
+      id: "ai",
+      label: "AI RCA & Patching",
+      icon: BrainCircuit
+    },
+    {
+      id: "terminal",
+      label: "Zero-Trust Terminal",
+      icon: TerminalIcon
+    }
+  ];
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-zinc-950 font-sans text-zinc-100">
       <ToastContainer
         toasts={toasts}
         removeToast={removeToast}
       />
 
-      {/* Sidebar Navigation */}
-      <aside className="w-64 border-r border-zinc-800/80 bg-zinc-950 flex flex-col justify-between select-none shrink-0">
-
+      <aside className="flex w-64 shrink-0 flex-col justify-between border-r border-zinc-800/80 bg-zinc-950">
         <div>
-
-          {/* Header Branding */}
-          <div className="p-5 border-b border-zinc-800/80 flex items-center gap-3">
-
-            <div className="p-2 bg-blue-600/10 border border-blue-500/20 rounded-lg text-blue-400 shrink-0">
-              <BrainCircuit className="w-5 h-5" />
+          <div className="flex items-center gap-3 border-b border-zinc-800/80 p-5">
+            <div className="shrink-0 rounded-lg border border-blue-500/20 bg-blue-600/10 p-2 text-blue-400">
+              <BrainCircuit className="h-5 w-5" />
             </div>
 
             <div className="min-w-0">
-              <h1 className="font-bold text-sm tracking-wide text-zinc-100 truncate">
+              <h1 className="truncate text-sm font-bold tracking-wide">
                 EKS RCA Engine
               </h1>
 
-              <p className="text-[10px] text-zinc-500 font-mono">
+              <p className="font-mono text-[10px] text-zinc-500">
                 v1.0.0 • AI-SRE Control
               </p>
             </div>
-
           </div>
 
-          {/* Navigation Links */}
-          <nav className="p-3 space-y-1">
-
-            {[
-              {
-                id: "overview",
-                label: "System Overview",
-                icon: LayoutDashboard
-              },
-              {
-                id: "lab",
-                label: "K8s Testing Lab",
-                icon: FlaskConical
-              },
-              {
-                id: "ai",
-                label: "AI RCA & Patching",
-                icon: BrainCircuit
-              },
-              {
-                id: "terminal",
-                label: "Zero-Trust Terminal",
-                icon: TerminalIcon
-              }
-            ].map(item => {
-
+          <nav className="space-y-1 p-3">
+            {navigationItems.map((item) => {
               const Icon = item.icon;
-              const isActive = activeTab === item.id;
+              const active = activeTab === item.id;
 
               return (
                 <button
                   key={item.id}
+                  type="button"
                   onClick={() => setActiveTab(item.id)}
-                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-md text-xs font-medium transition-all duration-200 ease-out active:scale-[0.98] ${
-                    isActive
-                      ? "bg-zinc-800/60 text-zinc-100 border border-zinc-700/50 shadow-sm"
-                      : "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/80 hover:translate-x-0.5"
+                  className={`flex w-full items-center gap-3 rounded-md px-3.5 py-2.5 text-left text-xs font-medium transition ${
+                    active
+                      ? "border border-zinc-700/50 bg-zinc-800/60 text-zinc-100"
+                      : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
                   }`}
                 >
                   <Icon
-                    className={`w-4 h-4 shrink-0 ${
-                      isActive
+                    className={`h-4 w-4 shrink-0 ${
+                      active
                         ? "text-blue-400"
                         : "text-zinc-500"
                     }`}
                   />
 
-                  <span className="truncate">{item.label}</span>
+                  <span>{item.label}</span>
                 </button>
               );
             })}
-
           </nav>
-
         </div>
 
-        {/* Cluster Status Footer Badge */}
-        <div className="p-4 border-t border-zinc-800/80 bg-zinc-900/30">
-
+        <div className="border-t border-zinc-800/80 bg-zinc-900/30 p-4">
           <div className="flex items-center justify-between text-xs">
-
             <span className="text-zinc-400">
-              EKS Status
+              Environment
             </span>
 
             <span
-              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-mono border ${
-                clusterHealth?.connected
-                  ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                  : "bg-amber-500/10 text-amber-400 border-amber-500/20"
-              }`}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[11px] ${modeClasses.badge}`}
             >
               <span
-                className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                  clusterHealth?.connected
-                    ? "bg-emerald-400"
-                    : "bg-amber-400"
-                }`}
+                className={`h-1.5 w-1.5 rounded-full ${modeClasses.dot}`}
               />
 
-              {clusterHealth?.connected
-                ? "ONLINE"
-                : "DEMO MODE"}
+              {modeLabel}
             </span>
-
           </div>
 
+          <p className="mt-2 text-[10px] leading-relaxed text-zinc-600">
+            {modeLabel === "LIVE"
+              ? "Connected to a live Kubernetes cluster."
+              : modeLabel === "DEMO"
+                ? "Using deterministic simulated data."
+                : "Live cluster is not reachable."}
+          </p>
         </div>
-
       </aside>
 
-      {/* Main Content Area */}
-      <main className="flex-1 flex flex-col min-w-0 overflow-y-auto bg-zinc-950">
-
-        {/* Top Navbar */}
-        <header className="h-14 border-b border-zinc-800/80 px-6 flex items-center justify-between bg-zinc-950/50 backdrop-blur-sm sticky top-0 z-10 shrink-0">
-
-          <div className="flex items-center gap-2 text-xs text-zinc-400 font-mono min-w-0">
+      <main className="min-w-0 flex-1 overflow-y-auto bg-zinc-950">
+        <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-zinc-800/80 bg-zinc-950/90 px-6 backdrop-blur">
+          <div className="flex min-w-0 items-center gap-2 font-mono text-xs text-zinc-500">
             <span>cluster</span>
             <span>/</span>
 
-            <span className="text-zinc-100 font-semibold truncate">
-              {selectedScenario
-                ? selectedScenario.affected_component
-                : "default"}
+            <span className="truncate text-zinc-200">
+              {selectedScenario?.affected_component ||
+                "no-active-incident"}
             </span>
           </div>
 
           <button
-            onClick={fetchClusterHealth}
-            className="group flex items-center gap-2 text-xs text-zinc-400 hover:text-zinc-200 hover:border-zinc-700 hover:bg-zinc-900 active:scale-[0.97] transition-all duration-200 bg-zinc-900/60 border border-zinc-800 px-3 py-1.5 rounded-md shrink-0"
+            type="button"
+            onClick={() => fetchClusterHealth()}
+            className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-400 transition hover:border-zinc-700 hover:bg-zinc-800 hover:text-zinc-200"
           >
-            <RefreshCw className="w-3.5 h-3.5 transition-transform duration-500 group-hover:rotate-180" />
+            <RefreshCw className="h-3.5 w-3.5" />
             Refresh State
           </button>
-
         </header>
 
-        <div
-          key={activeTab}
-          className="animate-tab-in p-6 md:p-10 max-w-6xl w-full mx-auto space-y-8 min-w-0"
-        >
-
-          {/* TAB 1: SYSTEM OVERVIEW */}
+        <div className="mx-auto w-full max-w-6xl space-y-8 p-6 md:p-10">
           {activeTab === "overview" && (
-            <div className="space-y-6">
-
+            <section className="space-y-6">
               <div>
-                <h2 className="text-lg font-bold text-zinc-100 tracking-tight">
-                  System Infrastructure Overview
-                </h2>
+                <div className="flex flex-wrap items-center gap-3">
+                  <h2 className="text-lg font-bold tracking-tight">
+                    System Infrastructure Overview
+                  </h2>
 
-                <p className="text-xs text-zinc-400 mt-1">
-                  Real-time status of connected Amazon EKS nodes and workload deployments.
+                  <span
+                    className={`rounded-full border px-2.5 py-1 font-mono text-[10px] ${modeClasses.badge}`}
+                  >
+                    {modeLabel} ENVIRONMENT
+                  </span>
+                </div>
+
+                <p className="mt-1 text-xs text-zinc-400">
+                  Monitor cluster connectivity, incident scenarios,
+                  and diagnostic capabilities from one control plane.
                 </p>
               </div>
 
-              {/* Stat Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div
+                className={`rounded-xl border p-5 ${modeClasses.border} ${modeClasses.background}`}
+              >
+                <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+                  <div className="flex items-start gap-4">
+                    <div
+                      className={`mt-1 h-3 w-3 shrink-0 rounded-full ${modeClasses.dot} ${
+                        modeLabel === "LIVE"
+                          ? "shadow-[0_0_12px_rgba(52,211,153,0.8)]"
+                          : ""
+                      }`}
+                    />
 
-                <div className="p-4 bg-zinc-900/40 border border-zinc-800/80 rounded-xl space-y-2 transition-all duration-200 hover:border-zinc-700 hover:bg-zinc-900/70 hover:-translate-y-0.5">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <h3
+                          className={`text-sm font-bold ${modeClasses.title}`}
+                        >
+                          {environmentCopy.title}
+                        </h3>
 
-                  <div className="flex justify-between text-xs text-zinc-400">
-                    <span>EKS Nodes</span>
-                    <Activity className="w-4 h-4 text-blue-400" />
+                        <span className="rounded border border-zinc-700/70 bg-zinc-950/40 px-2 py-0.5 font-mono text-[10px] text-zinc-400">
+                          {environmentCopy.detail}
+                        </span>
+                      </div>
+
+                      <p className="mt-2 max-w-2xl text-xs leading-relaxed text-zinc-300">
+                        {environmentCopy.description}
+                      </p>
+                    </div>
                   </div>
 
-                  {initialLoading ? (
-                    <>
-                      <div className="skeleton h-7 w-10" />
-                      <div className="skeleton h-3 w-24" />
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-2xl font-mono font-bold text-zinc-100">
-                        {clusterHealth?.node_count || 2}
-                      </p>
+                  <div className="shrink-0 text-left sm:text-right">
+                    <p className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">
+                      Last health check
+                    </p>
 
-                      <p className="text-[11px] text-emerald-400">
-                        All nodes Ready
-                      </p>
-                    </>
-                  )}
+                    <p className="mt-1 font-mono text-xs text-zinc-300">
+                      {lastUpdatedLabel}
+                    </p>
 
-                </div>
-
-                <div className="p-4 bg-zinc-900/40 border border-zinc-800/80 rounded-xl space-y-2 transition-all duration-200 hover:border-zinc-700 hover:bg-zinc-900/70 hover:-translate-y-0.5">
-
-                  <div className="flex justify-between text-xs text-zinc-400">
-                    <span>Simulated Scenarios</span>
-                    <FlaskConical className="w-4 h-4 text-amber-400" />
+                    <p className="mt-1 text-[10px] text-zinc-500">
+                      Automatic refresh every 10 seconds
+                    </p>
                   </div>
-
-                  {initialLoading ? (
-                    <>
-                      <div className="skeleton h-7 w-10" />
-                      <div className="skeleton h-3 w-32" />
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-2xl font-mono font-bold text-zinc-100">
-                        {scenarios.length}
-                      </p>
-
-                      <p className="text-[11px] text-zinc-400">
-                        OOMKilled, CrashLoop, Routing
-                      </p>
-                    </>
-                  )}
-
                 </div>
-
-                <div className="p-4 bg-zinc-900/40 border border-zinc-800/80 rounded-xl space-y-2 transition-all duration-200 hover:border-zinc-700 hover:bg-zinc-900/70 hover:-translate-y-0.5">
-
-                  <div className="flex justify-between text-xs text-zinc-400">
-                    <span>Security Engine</span>
-                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  </div>
-
-                  <p className="text-2xl font-mono font-bold text-zinc-100">
-                    Zero-Trust
-                  </p>
-
-                  <p className="text-[11px] text-zinc-400">
-                    Regex Allowlist Active
-                  </p>
-
-                </div>
-
               </div>
 
-              {/* Active Incident Overview */}
-              <div className="p-5 bg-zinc-900/30 border border-zinc-800/80 rounded-xl space-y-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <StatCard
+                  title="Kubernetes Nodes"
+                  value={
+                    initialLoading
+                      ? "..."
+                      : clusterHealth?.node_count ?? 0
+                  }
+                  subtitle={
+                    modeLabel === "LIVE"
+                      ? `${clusterHealth?.healthy_nodes ?? 0} nodes Ready`
+                      : modeLabel === "DEMO"
+                        ? "Simulated cluster"
+                        : "No live data"
+                  }
+                  icon={Activity}
+                  iconClass="text-blue-400"
+                />
 
-                <h3 className="text-sm font-semibold text-zinc-200">
-                  Active Selected Incident
-                </h3>
+                <StatCard
+                  title="Incident Scenarios"
+                  value={scenarios.length}
+                  subtitle="OOMKilled, CrashLoop, Routing"
+                  icon={FlaskConical}
+                  iconClass="text-amber-400"
+                />
+
+                <StatCard
+                  title="Security Engine"
+                  value="Zero-Trust"
+                  subtitle="Server-side allowlist active"
+                  icon={ShieldCheck}
+                  iconClass="text-emerald-400"
+                />
+              </div>
+
+              <div className="space-y-4 rounded-xl border border-zinc-800/80 bg-zinc-900/30 p-5">
+                <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                  <div>
+                    <h3 className="text-sm font-semibold text-zinc-200">
+                      Active Incident
+                    </h3>
+
+                    <p className="mt-1 text-[11px] text-zinc-500">
+                      The dashboard starts in a healthy state. Select a scenario only when you want to simulate a failure.
+                    </p>
+                  </div>
+
+                  {selectedScenario && (
+                    <button
+                      type="button"
+                      onClick={clearSelectedIncident}
+                      className="self-start rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-[11px] font-medium text-zinc-300 transition hover:bg-zinc-800 hover:text-white sm:self-auto"
+                    >
+                      Clear Incident
+                    </button>
+                  )}
+                </div>
 
                 {selectedScenario ? (
-
-                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 p-4 bg-zinc-950 border border-zinc-800/80 rounded-lg">
-
-                    <div className="space-y-1 min-w-0">
-
-                      <div className="flex items-center gap-2 flex-wrap">
-
-                        <span className="text-xs font-semibold text-zinc-100">
+                  <div className="flex flex-col items-start justify-between gap-4 rounded-lg border border-zinc-800 bg-zinc-950 p-4 sm:flex-row sm:items-center">
+                    <div className="min-w-0 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-semibold">
                           {selectedScenario.title}
                         </span>
 
-                        <span className="px-2 py-0.5 text-[10px] bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-full font-mono">
+                        <span className="rounded-full border border-rose-500/20 bg-rose-500/10 px-2 py-0.5 font-mono text-[10px] text-rose-400">
                           {selectedScenario.severity}
                         </span>
-
                       </div>
 
-                      <p className="text-xs text-zinc-400 max-w-xl break-words">
+                      <p className="max-w-2xl text-xs leading-relaxed text-zinc-400">
                         {selectedScenario.description}
                       </p>
-
                     </div>
 
                     <button
+                      type="button"
                       onClick={() => setActiveTab("ai")}
-                      className="group flex items-center gap-2 text-xs bg-blue-600 hover:bg-blue-500 active:scale-[0.97] text-white font-medium px-4 py-2 rounded-lg transition-all duration-200 shadow-lg shadow-blue-600/10 hover:shadow-blue-600/25 shrink-0"
+                      className="flex shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white transition hover:bg-blue-500"
                     >
                       Inspect RCA
-                      <ArrowRight className="w-3.5 h-3.5 transition-transform duration-200 group-hover:translate-x-0.5" />
+                      <ArrowRight className="h-3.5 w-3.5" />
                     </button>
-
                   </div>
-
                 ) : (
+                  <div className="rounded-lg border border-dashed border-emerald-500/20 bg-emerald-500/[0.03] p-6">
+                    <div className="flex items-start gap-3">
+                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
 
-                  <p className="text-xs text-zinc-500">
-                    No incident selected. Select one in the K8s Testing Lab.
-                  </p>
+                      <div>
+                        <p className="text-xs font-semibold text-emerald-300">
+                          No Active Incident
+                        </p>
 
+                        <p className="mt-1 text-xs leading-relaxed text-zinc-400">
+                          The system is ready and no failure scenario is currently selected. Open the K8s Testing Lab to begin a controlled simulation.
+                        </p>
+
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab("lab")}
+                          className="mt-3 inline-flex items-center gap-2 rounded-lg bg-zinc-800 px-3 py-2 text-[11px] font-medium text-zinc-200 transition hover:bg-zinc-700"
+                        >
+                          Open Testing Lab
+                          <ArrowRight className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 )}
-
               </div>
 
-            </div>
+              {clusterHealth?.message && (
+                <div className="rounded-lg border border-zinc-800 bg-zinc-900/30 p-4 text-xs text-zinc-400">
+                  <span className="font-semibold text-zinc-200">
+                    Environment status:
+                  </span>{" "}
+                  {clusterHealth.message}
+                </div>
+              )}
+            </section>
           )}
 
-          {/* TAB 2: K8S TESTING LAB */}
           {activeTab === "lab" && (
-
-            <div className="space-y-6">
-
+            <section className="space-y-6">
               <div>
-
-                <h2 className="text-lg font-bold text-zinc-100 tracking-tight">
+                <h2 className="text-lg font-bold tracking-tight">
                   Kubernetes Incident Simulation Lab
                 </h2>
 
-                <p className="text-xs text-zinc-400 mt-1">
-                  Inject real fault conditions into active EKS deployments to evaluate AI detection.
+                <p className="mt-1 text-xs text-zinc-400">
+                  Inject controlled failure scenarios and observe how the diagnostic workflow responds.
                 </p>
-
               </div>
 
-              {!initialLoading && scenariosError && scenarios.length === 0 ? (
+              {!initialLoading &&
+              scenariosError &&
+              scenarios.length === 0 ? (
+                <div className="space-y-3 rounded-xl border border-dashed border-rose-500/30 bg-rose-500/[0.03] p-10 text-center">
+                  <AlertOctagon className="mx-auto h-8 w-8 text-rose-400" />
 
-                <div className="p-10 text-center border border-dashed border-rose-500/20 bg-rose-500/[0.03] rounded-xl space-y-3">
+                  <p className="text-sm font-semibold">
+                    Could not reach the incident backend
+                  </p>
 
-                  <AlertOctagon className="w-8 h-8 text-rose-400/70 mx-auto" />
-
-                  <div className="space-y-1">
-                    <p className="text-sm font-semibold text-zinc-200">
-                      Couldn't reach the incident backend
-                    </p>
-                    <p className="text-xs text-zinc-400 max-w-sm mx-auto">
-                      The API at {API_BASE} didn't respond. Check that the backend is running, then retry.
-                    </p>
-                  </div>
+                  <p className="mx-auto max-w-md text-xs text-zinc-400">
+                    API endpoint: {API_BASE}
+                  </p>
 
                   <button
+                    type="button"
                     onClick={fetchScenarios}
-                    className="inline-flex items-center gap-2 text-xs bg-zinc-800 hover:bg-zinc-700 active:scale-[0.97] text-zinc-200 font-medium px-4 py-2 rounded-lg transition-all duration-200"
+                    className="rounded-lg bg-zinc-800 px-4 py-2 text-xs font-medium text-zinc-200 transition hover:bg-zinc-700"
                   >
-                    <RefreshCw className="w-3.5 h-3.5" />
                     Retry
                   </button>
-
                 </div>
-
               ) : (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                  {initialLoading &&
+                    [0, 1, 2].map((item) => (
+                      <div
+                        key={item}
+                        className="h-52 animate-pulse rounded-xl border border-zinc-800 bg-zinc-900/30"
+                      />
+                    ))}
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {!initialLoading &&
+                    scenarios.map((scenario) => {
+                      const active =
+                        selectedScenario?.id === scenario.id;
 
-                {initialLoading &&
-                  [0, 1, 2].map(i => (
-                    <div
-                      key={`sk-${i}`}
-                      className="p-5 rounded-xl border bg-zinc-900/30 border-zinc-800/80 flex flex-col justify-between gap-4"
-                    >
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div className="skeleton h-3 w-16" />
-                          <div className="skeleton h-4 w-14 rounded-full" />
+                      return (
+                        <div
+                          key={scenario.id}
+                          className={`flex flex-col justify-between gap-5 rounded-xl border p-5 transition ${
+                            active
+                              ? "border-blue-500/50 bg-zinc-900/80 ring-1 ring-blue-500/20"
+                              : "border-zinc-800/80 bg-zinc-900/30 hover:border-zinc-700"
+                          }`}
+                        >
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-mono text-[10px] uppercase tracking-wider text-zinc-500">
+                                {scenario.category}
+                              </span>
+
+                              <span className="rounded border border-zinc-700 bg-zinc-800 px-2 py-0.5 font-mono text-[10px] text-zinc-300">
+                                {scenario.severity}
+                              </span>
+                            </div>
+
+                            <h3 className="text-sm font-semibold">
+                              {scenario.title}
+                            </h3>
+
+                            <p className="text-xs leading-relaxed text-zinc-400">
+                              {scenario.description}
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleRunScenario(scenario)
+                            }
+                            className={`flex w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-semibold transition ${
+                              active
+                                ? "bg-blue-600 text-white"
+                                : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
+                            }`}
+                          >
+                            <Zap className="h-3.5 w-3.5" />
+
+                            {active
+                              ? "Scenario Active"
+                              : "Trigger Fault"}
+                          </button>
                         </div>
-                        <div className="skeleton h-4 w-3/4" />
-                        <div className="skeleton h-3 w-full" />
-                        <div className="skeleton h-3 w-2/3" />
-                      </div>
-                      <div className="skeleton h-9 w-full rounded-lg" />
-                    </div>
-                  ))}
-
-                {!initialLoading && scenarios.map(sc => (
-
-                  <div
-                    key={sc.id}
-                    className={`p-5 rounded-xl border transition-all duration-200 flex flex-col justify-between gap-4 ${
-                      selectedScenario?.id === sc.id
-                        ? "bg-zinc-900/80 border-blue-500/50 ring-1 ring-blue-500/20"
-                        : "bg-zinc-900/30 border-zinc-800/80 hover:border-zinc-700 hover:bg-zinc-900/50 hover:-translate-y-0.5"
-                    }`}
-                  >
-
-                    <div className="space-y-2">
-
-                      <div className="flex items-center justify-between">
-
-                        <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">
-                          {sc.category}
-                        </span>
-
-                        <span className="px-2 py-0.5 text-[10px] font-mono bg-zinc-800 text-zinc-300 rounded border border-zinc-700">
-                          {sc.severity}
-                        </span>
-
-                      </div>
-
-                      <h3 className="text-sm font-semibold text-zinc-100">
-                        {sc.title}
-                      </h3>
-
-                      <p className="text-xs text-zinc-400 line-clamp-3 leading-relaxed break-words">
-                        {sc.description}
-                      </p>
-
-                    </div>
-
-                    <button
-                      onClick={() => handleRunScenario(sc)}
-                      className={`w-full py-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.97] ${
-                        selectedScenario?.id === sc.id
-                          ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
-                          : "bg-zinc-800 hover:bg-zinc-700 text-zinc-200"
-                      }`}
-                    >
-                      <Zap className="w-3.5 h-3.5 shrink-0" />
-
-                      {selectedScenario?.id === sc.id
-                        ? "Scenario Active"
-                        : "Trigger Fault"}
-                    </button>
-
-                  </div>
-
-                ))}
-
-              </div>
-
+                      );
+                    })}
+                </div>
               )}
-
-            </div>
+            </section>
           )}
 
-          {/* TAB 3: AI RCA & REMEDIATION */}
           {activeTab === "ai" && (
-
-            <div className="space-y-6 min-w-0">
-
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-
+            <section className="space-y-6">
+              <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
                 <div>
-
-                  <h2 className="text-lg font-bold text-zinc-100 tracking-tight">
+                  <h2 className="text-lg font-bold tracking-tight">
                     AI Telemetry & Root Cause Analysis
                   </h2>
 
-                  <p className="text-xs text-zinc-400 mt-1">
-                    Autonomous investigation of Kubernetes events, pod exit codes, and logs.
+                  <p className="mt-1 text-xs text-zinc-400">
+                    Analyze Kubernetes logs and events, then review a recommended remediation.
                   </p>
-
                 </div>
 
                 <button
+                  type="button"
                   onClick={fetchAiRca}
                   disabled={rcaLoading || !selectedScenario}
-                  className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 active:scale-[0.97] disabled:opacity-50 disabled:active:scale-100 text-white text-xs font-semibold rounded-lg transition-all duration-200 shrink-0"
+                  className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-
-                  {rcaLoading
-                    ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    : <BrainCircuit className="w-3.5 h-3.5" />}
+                  {rcaLoading ? (
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <BrainCircuit className="h-3.5 w-3.5" />
+                  )}
 
                   {rcaLoading
                     ? "Analyzing Telemetry..."
                     : "Run AI Investigation"}
-
                 </button>
-
               </div>
 
-              {/* RCA Details Grid */}
-              {rcaResult ? (
+              {!selectedScenario && (
+                <EmptyState message="No incident is currently selected. Choose a scenario from the K8s Testing Lab to begin an investigation." />
+              )}
 
-                <div className="space-y-6 min-w-0">
+              {selectedScenario && !rcaResult && (
+                <EmptyState message='Click "Run AI Investigation" to analyze the selected incident.' />
+              )}
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {rcaResult && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                    <InfoCard
+                      title="Root Cause Explanation"
+                      value={
+                        rcaResult.root_cause ||
+                        rcaResult.analysis ||
+                        "No root cause returned."
+                      }
+                      icon={AlertOctagon}
+                      color="text-rose-400"
+                    />
 
-                    <div className="p-5 bg-zinc-900/40 border border-zinc-800/80 rounded-xl space-y-2 min-w-0">
+                    <InfoCard
+                      title="Operational Impact"
+                      value={
+                        rcaResult.impact ||
+                        "No impact description returned."
+                      }
+                      icon={Activity}
+                      color="text-amber-400"
+                    />
 
-                      <span className="text-xs font-semibold text-rose-400 flex items-center gap-1.5">
-                        <AlertOctagon className="w-4 h-4 shrink-0" />
-                        Root Cause Explanation
-                      </span>
-
-                      <p className="text-xs text-zinc-300 leading-relaxed font-sans break-words whitespace-pre-wrap">
-                        {rcaResult.root_cause || rcaResult.analysis}
-                      </p>
-
-                    </div>
-
-                    <div className="p-5 bg-zinc-900/40 border border-zinc-800/80 rounded-xl space-y-2 min-w-0">
-
-                      <span className="text-xs font-semibold text-amber-400 flex items-center gap-1.5">
-                        <Activity className="w-4 h-4 shrink-0" />
-                        Operational Impact
-                      </span>
-
-                      <p className="text-xs text-zinc-300 leading-relaxed font-sans break-words whitespace-pre-wrap">
-                        {rcaResult.impact || "Service degraded."}
-                      </p>
-
-                    </div>
-
-                    <div className="p-5 bg-zinc-900/40 border border-zinc-800/80 rounded-xl space-y-2 min-w-0">
-
-                      <span className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
-                        <Check className="w-4 h-4 shrink-0" />
-                        Recommended Fix
-                      </span>
-
-                      <p className="text-xs text-zinc-300 leading-relaxed font-sans break-words whitespace-pre-wrap">
-                        {rcaResult.recommended_fix || "See manifest delta below."}
-                      </p>
-
-                    </div>
-
+                    <InfoCard
+                      title="Recommended Fix"
+                      value={
+                        rcaResult.recommended_fix ||
+                        "No remediation recommendation returned."
+                      }
+                      icon={Check}
+                      color="text-emerald-400"
+                    />
                   </div>
 
-                  {/* YAML Split View & Remediation */}
-                  <div className="p-5 bg-zinc-900/30 border border-zinc-800/80 rounded-xl space-y-4 min-w-0">
+                  <div className="space-y-4 rounded-xl border border-zinc-800/80 bg-zinc-900/30 p-5">
+                    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                      <div>
+                        <h3 className="text-sm font-semibold">
+                          Manifest Delta
+                        </h3>
 
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-
-                      <h3 className="text-sm font-semibold text-zinc-200">
-                        Manifest Delta (Problem vs Ground Truth Fix)
-                      </h3>
+                        <p className="mt-1 text-[11px] text-zinc-500">
+                          Faulty state compared with the recommended target state.
+                        </p>
+                      </div>
 
                       <button
+                        type="button"
                         onClick={triggerRemediation}
-                        disabled={remediating || remediationSuccess}
-                        className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200 active:scale-[0.97] disabled:active:scale-100 shrink-0 ${
+                        disabled={
+                          remediating || remediationSuccess
+                        }
+                        className={`flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold transition ${
                           remediationSuccess
-                            ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
-                            : "bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/10 hover:shadow-emerald-600/25"
-                        }`}
+                            ? "border border-emerald-500/30 bg-emerald-500/20 text-emerald-400"
+                            : "bg-emerald-600 text-white hover:bg-emerald-500"
+                        } disabled:cursor-not-allowed disabled:opacity-70`}
                       >
+                        {remediationSuccess ? (
+                          <Check className="h-3.5 w-3.5" />
+                        ) : (
+                          <RefreshCw
+                            className={`h-3.5 w-3.5 ${
+                              remediating
+                                ? "animate-spin"
+                                : ""
+                            }`}
+                          />
+                        )}
 
                         {remediationSuccess
-                          ? <Check className="w-3.5 h-3.5" />
-                          : <RefreshCw
-                              className={`w-3.5 h-3.5 ${
-                                remediating
-                                  ? "animate-spin"
-                                  : ""
-                              }`}
-                            />}
-
-                        {remediationSuccess
-                          ? "Remediated & Reconciled"
+                          ? "Remediated"
                           : remediating
                             ? "Applying Patch..."
                             : "Apply One-Click Patch"}
-
                       </button>
-
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-mono text-[11px] min-w-0">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <YamlPanel
+                        title="Active Faulty State"
+                        value={selectedScenario.problem_yaml}
+                        color="rose"
+                      />
 
-                      {/* Problem YAML */}
-                      <div className="bg-zinc-950 border border-rose-500/20 rounded-lg p-4 overflow-x-auto text-rose-300/90 leading-relaxed min-w-0">
-
-                        <div className="text-[10px] text-rose-500 mb-2 font-bold uppercase tracking-wider">
-                          Active Faulty State
-                        </div>
-
-                        <pre className="whitespace-pre-wrap break-all">
-                          {selectedScenario?.problem_yaml}
-                        </pre>
-
-                      </div>
-
-                      {/* Fix YAML */}
-                      <div className="bg-zinc-950 border border-emerald-500/20 rounded-lg p-4 overflow-x-auto text-emerald-300/90 leading-relaxed min-w-0">
-
-                        <div className="text-[10px] text-emerald-500 mb-2 font-bold uppercase tracking-wider">
-                          Recommended Fix Target
-                        </div>
-
-                        <pre className="whitespace-pre-wrap break-all">
-                          {selectedScenario?.fix_yaml}
-                        </pre>
-
-                      </div>
-
+                      <YamlPanel
+                        title="Recommended Fix Target"
+                        value={selectedScenario.fix_yaml}
+                        color="emerald"
+                      />
                     </div>
-
                   </div>
-
                 </div>
-
-              ) : (
-
-                <div className="p-12 text-center border border-dashed border-zinc-800 rounded-xl space-y-3">
-
-                  <BrainCircuit className="w-8 h-8 text-zinc-600 mx-auto" />
-
-                  <p className="text-xs text-zinc-400">
-                    Click "Run AI Investigation" to analyze logs and compute root cause analysis.
-                  </p>
-
-                </div>
-
               )}
-
-            </div>
+            </section>
           )}
 
-          {/* TAB 4: ZERO-TRUST TERMINAL */}
           {activeTab === "terminal" && (
-
-            <div className="space-y-6 min-w-0">
-
+            <section className="space-y-6">
               <div>
-
-                <h2 className="text-lg font-bold text-zinc-100 tracking-tight">
+                <h2 className="text-lg font-bold tracking-tight">
                   Zero-Trust Interactive Terminal
                 </h2>
 
-                <p className="text-xs text-zinc-400 mt-1">
-                  Execute safe inspection commands against EKS. Strictly guarded by Regex Allowlist.
+                <p className="mt-1 text-xs text-zinc-400">
+                  Run approved, read-only Kubernetes inspection commands. The allowlist is enforced by the backend.
                 </p>
+              </div>
 
+              <div className="flex flex-wrap gap-2">
+                {TERMINAL_PRESETS.map((preset) => (
+                  <button
+                    key={preset.command}
+                    type="button"
+                    onClick={() =>
+                      executeTerminal(null, preset.command)
+                    }
+                    className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1.5 font-mono text-[11px] text-zinc-300 transition hover:bg-zinc-800 hover:text-white"
+                  >
+                    {preset.label}
+                  </button>
+                ))}
               </div>
 
               <form
                 onSubmit={executeTerminal}
-                className="flex gap-3"
+                className="flex flex-col gap-3 sm:flex-row"
               >
-
                 <input
                   type="text"
                   value={terminalCmd}
-                  onChange={(e) => setTerminalCmd(e.target.value)}
-                  placeholder="e.g. kubectl get pods"
-                  className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2.5 text-xs font-mono text-zinc-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30 transition-all duration-200 min-w-0"
+                  onChange={(event) =>
+                    setTerminalCmd(event.target.value)
+                  }
+                  placeholder="kubectl get pods"
+                  className="min-w-0 flex-1 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2.5 font-mono text-xs text-zinc-100 outline-none transition focus:border-blue-500"
                 />
 
                 <button
                   type="submit"
-                  className="px-5 py-2.5 bg-blue-600 hover:bg-blue-500 active:scale-[0.97] text-white text-xs font-semibold rounded-lg transition-all duration-200 shadow-lg shadow-blue-600/10 hover:shadow-blue-600/25 shrink-0"
+                  disabled={terminalLoading}
+                  className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-xs font-semibold text-white transition hover:bg-blue-500 disabled:opacity-60"
                 >
+                  {terminalLoading && (
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  )}
+
                   Execute
                 </button>
-
               </form>
 
-              {/* Terminal Display */}
-              <div className="bg-zinc-950 border border-zinc-800 rounded-xl p-5 font-mono text-xs text-zinc-300 min-h-[300px] overflow-x-auto leading-relaxed shadow-inner min-w-0">
-
-                <div className="flex items-center gap-2 text-zinc-500 text-[10px] mb-3 pb-2 border-b border-zinc-800/80">
-
-                  <span className="w-2.5 h-2.5 rounded-full bg-rose-500/80 shrink-0" />
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500/80 shrink-0" />
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500/80 shrink-0" />
+              <div className="min-h-[320px] overflow-x-auto rounded-xl border border-zinc-800 bg-zinc-950 p-5 font-mono text-xs leading-relaxed text-zinc-300 shadow-inner">
+                <div className="mb-3 flex items-center gap-2 border-b border-zinc-800/80 pb-3 text-[10px] text-zinc-500">
+                  <span className="h-2.5 w-2.5 rounded-full bg-rose-500/80" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-amber-500/80" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-emerald-500/80" />
 
                   <span className="ml-2">
-                    bash - kubectl shell
+                    kubectl inspection terminal
                   </span>
-
                 </div>
 
-                <pre className="whitespace-pre-wrap break-all">
-                  {terminalOutput || "Output will appear here after command execution..."}
+                <pre className="whitespace-pre-wrap break-words">
+                  {terminalOutput ||
+                    "Output will appear here after command execution..."}
                 </pre>
-
               </div>
-
-            </div>
+            </section>
           )}
-
         </div>
-
       </main>
+    </div>
+  );
+}
 
+function StatCard({
+  title,
+  value,
+  subtitle,
+  icon: Icon,
+  iconClass
+}) {
+  return (
+    <div className="space-y-2 rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-4">
+      <div className="flex items-center justify-between text-xs text-zinc-400">
+        <span>{title}</span>
+        <Icon className={`h-4 w-4 ${iconClass}`} />
+      </div>
+
+      <p className="font-mono text-2xl font-bold text-zinc-100">
+        {value}
+      </p>
+
+      <p className="text-[11px] text-zinc-400">
+        {subtitle}
+      </p>
+    </div>
+  );
+}
+
+function InfoCard({
+  title,
+  value,
+  icon: Icon,
+  color
+}) {
+  return (
+    <div className="min-w-0 space-y-3 rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-5">
+      <span
+        className={`flex items-center gap-1.5 text-xs font-semibold ${color}`}
+      >
+        <Icon className="h-4 w-4 shrink-0" />
+        {title}
+      </span>
+
+      <p className="whitespace-pre-wrap break-words text-xs leading-relaxed text-zinc-300">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function YamlPanel({
+  title,
+  value,
+  color
+}) {
+  const styles =
+    color === "rose"
+      ? "border-rose-500/20 text-rose-300/90"
+      : "border-emerald-500/20 text-emerald-300/90";
+
+  const titleColor =
+    color === "rose"
+      ? "text-rose-400"
+      : "text-emerald-400";
+
+  return (
+    <div
+      className={`min-w-0 overflow-x-auto rounded-lg border bg-zinc-950 p-4 font-mono text-[11px] leading-relaxed ${styles}`}
+    >
+      <div
+        className={`mb-2 text-[10px] font-bold uppercase tracking-wider ${titleColor}`}
+      >
+        {title}
+      </div>
+
+      <pre className="whitespace-pre-wrap break-words">
+        {value || "No manifest available."}
+      </pre>
+    </div>
+  );
+}
+
+function EmptyState({ message }) {
+  return (
+    <div className="rounded-xl border border-dashed border-zinc-800 p-12 text-center">
+      <BrainCircuit className="mx-auto mb-3 h-8 w-8 text-zinc-600" />
+
+      <p className="mx-auto max-w-xl text-xs leading-relaxed text-zinc-400">
+        {message}
+      </p>
     </div>
   );
 }

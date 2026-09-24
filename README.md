@@ -1,5 +1,5 @@
 # EKS Incident Simulator with AI Diagnostics
-
+ 
 ![AWS](https://img.shields.io/badge/AWS-232F3E?style=for-the-badge&logo=amazon-aws&logoColor=white)
 ![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white)
 ![Terraform](https://img.shields.io/badge/Terraform-7B42BC?style=for-the-badge&logo=terraform&logoColor=white)
@@ -7,15 +7,19 @@
 ![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)
 
-A cloud engineering tool that provisions an Amazon EKS cluster via Terraform, injects failure scenarios into live Kubernetes workloads, and streams cluster telemetry to a local LLM for real-time Root Cause Analysis (RCA).
+A cloud engineering and SRE platform that provisions an Amazon EKS cluster with Terraform, injects controlled failure scenarios into Kubernetes workloads, collects cluster telemetry, and generates structured Root Cause Analysis with recommended remediation.
 
-> 🔗 **Live demo:** [your-hosted-url-here](#) — runs in Demo Mode, nothing to install, no AWS access needed.
-> Want to run it yourself instead? See "Run It Yourself" below.
+The project supports two environments:
+
+- **Demo Mode** — a public, safe experience using deterministic mock data.
+- **Live AWS Mode** — a real EKS integration using live Kubernetes nodes, pods, logs, and events.
+
+[Open the Public Demo](https://eks-incident-simulator-ai-diagnosti.vercel.app/)
 
 ---
 
 ## 🛠 Tech Stack
-
+ 
 | Category | Technologies |
 | :--- | :--- |
 | **Cloud Infrastructure** | ![AWS](https://img.shields.io/badge/AWS-232F3E?style=for-the-badge&logo=amazon-aws&logoColor=white) ![EKS](https://img.shields.io/badge/AWS_EKS-FF9900?style=for-the-badge&logo=amazon-aws&logoColor=white) |
@@ -24,139 +28,365 @@ A cloud engineering tool that provisions an Amazon EKS cluster via Terraform, in
 | **Backend & AI Engine** | ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white) ![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white) ![Ollama](https://img.shields.io/badge/Ollama-000000?style=for-the-badge&logo=ollama&logoColor=white) |
 | **Frontend Management UI** | ![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB) ![Vite](https://img.shields.io/badge/Vite-646CFF?style=for-the-badge&logo=vite&logoColor=white) ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white) |
 | **Automation** | ![Bash](https://img.shields.io/badge/GNU_Bash-4EAA25?style=for-the-badge&logo=gnu-bash&logoColor=white) |
-
+ 
 ---
 
 ## 🏗 System Architecture
 
 <p align="center">
-  <img src="assets/architecture.svg" alt="Architecture diagram: hosted dashboard and control API talking to a live or mocked Amazon EKS cluster" width="100%">
+  <img
+    src="assets/architecture.svg"
+    alt="EKS Incident Simulator system architecture"
+    width="100%"
+  />
 </p>
 
-> The hosted app is the same code either way — only the right-hand side changes. In **Demo Mode** it's replaced with realistic mock data; in a **full deployment** it's a real Amazon EKS cluster reached through your AWS credentials.
+The platform is built around a FastAPI control plane that communicates with the React dashboard and connects to one of two runtime environments:
 
-### Component Architecture Breakdown
+- In **Demo Mode**, it returns realistic deterministic mock responses.
+- In **Live Mode**, it connects to a real Kubernetes cluster backed by Amazon EKS.
 
-| Layer | Subsystem | Technology Stack | Core Responsibility |
-| :--- | :--- | :--- | :--- |
-| **Client UI** | Management Dashboard | React 18, Vite, Tailwind CSS | Real-time incident trigger, cluster visualization, & AI diagnostic report view |
-| **Control Layer** | API Orchestration | Python 3.11, FastAPI, K8s SDK | Asynchronous failure manifest injection, log collection, & diagnostic formatting |
-| **Intelligence** | LLM Engine | Ollama (Llama 3 / DeepSeek) | Self-hosted, zero-cost Root Cause Analysis with deterministic fallback handling |
-| **Target Cloud** | Managed Kubernetes | AWS VPC, Amazon EKS, Terraform | Production-grade K8s infrastructure subject to active fault scenario injection |
+Both environments use the same frontend workflow and API contract. The difference is the source of the Kubernetes data.
+
+---
+
+## 🎯 What the Platform Does
+
+The application demonstrates an end-to-end Kubernetes incident-response workflow:
+
+1. Select a controlled failure scenario.
+2. Inject the faulty workload configuration.
+3. Observe the resulting Kubernetes symptoms.
+4. Collect logs and Kubernetes events.
+5. Generate a structured Root Cause Analysis.
+6. Review the recommended remediation.
+7. Apply the corrected manifest.
+8. Inspect the cluster through a restricted terminal.
+
+This makes the project useful as both an interactive cloud engineering demo and a practical SRE incident simulation tool.
+
+---
+
+## 🚨 Incident Scenarios
+
+### OOMKilled
+
+A workload exceeds its configured memory limit.
+
+The simulator demonstrates how Kubernetes terminates the container when the process exceeds its cgroup memory boundary.
+
+### CrashLoopBackOff
+
+A workload depends on a Kubernetes Secret that does not exist.
+
+The container fails during startup and repeatedly restarts until the missing configuration is restored.
+
+### Broken Service Routing
+
+A Service selector does not match the labels of the target workload.
+
+The pods may be running, but the Service has no valid endpoints and traffic cannot reach the application.
+
+---
+
+## 🧠 Simulation and Diagnostic Workflow
+
+### 1. Select a Scenario
+
+Choose one of the available Kubernetes failure scenarios from the Testing Lab.
+
+### 2. Trigger the Incident
+
+The backend receives the selected scenario and applies its faulty manifest.
+
+- In **Demo Mode**, the action is simulated.
+- In **Live Mode**, the manifest is applied to the connected EKS cluster.
+
+### 3. Observe the Failure
+
+The dashboard presents the resulting workload state, including:
+
+- Pod status.
+- Restart counts.
+- Kubernetes events.
+- Missing service endpoints.
+- Node health.
+- Workload availability.
+
+### 4. Run the Investigation
+
+The backend collects telemetry from the affected component:
+
+- Recent pod logs.
+- Previous container logs when available.
+- Kubernetes events.
+- Live cluster information.
+
+### 5. Review the RCA
+
+The RCA engine returns:
+
+- Root cause.
+- Operational impact.
+- Recommended technical fix.
+- Analysis source.
+
+When Ollama is available, it can generate the analysis. If Ollama is unavailable or returns an invalid response, the deterministic expert engine provides a reliable fallback.
+
+### 6. Apply the Remediation
+
+The interface displays the faulty manifest next to the recommended fix.
+
+- In **Demo Mode**, remediation is simulated.
+- In **Live Mode**, the corrected manifest is applied to Kubernetes.
+
+---
+
+## 🖥 Zero-Trust Interactive Terminal
+
+The dashboard includes a restricted terminal for safe Kubernetes inspection.
+
+The interface provides ready-to-use commands such as:
+
+```text
+kubectl get pods
+kubectl get services
+kubectl get events
+kubectl get deployments
+kubectl get nodes
+kubectl cluster-info
+```
+
+Commands are validated on the backend through a strict allowlist. Only approved read-only inspection commands can be executed.
+
+The terminal behaves differently according to the environment:
+
+- **Demo Mode** returns deterministic simulated output.
+- **Live Mode** executes approved commands against the connected Kubernetes cluster.
+- **Offline** returns a clear connection error instead of pretending to provide live data.
+
+The interface clearly reports the current environment as:
+
+```text
+LIVE
+DEMO
+OFFLINE
+```
 
 ---
 
 ## 📸 Screenshots
 
-<!-- Replace with real screenshots/GIF before publishing: dashboard overview, an active incident, and the AI RCA panel with the recommended fix. -->
-| Dashboard Overview | AI Root Cause Analysis |
-| :---: | :---: |
-| _screenshot coming_ | _screenshot coming_ |
+<p align="center">
+  <img
+    src="assets/screenshots/dashboard-overview.png"
+    alt="EKS Incident Simulator dashboard overview"
+    width="49%"
+  />
+  <img
+    src="assets/screenshots/incident-lab.png"
+    alt="Kubernetes incident simulation lab"
+    width="49%"
+  />
+</p>
+
+<p align="center">
+  <img
+    src="assets/screenshots/ai-rca-result.png"
+    alt="AI root cause analysis result"
+    width="49%"
+  />
+  <img
+    src="assets/screenshots/zero-trust-terminal.png"
+    alt="Zero-Trust interactive terminal"
+    width="49%"
+  />
+</p>
 
 ---
 
-## 💡 Key Capabilities
+## Public Demo Mode
 
-- **Automated Infrastructure:** Multi-AZ VPC and Amazon EKS cluster lifecycle managed via modular Terraform manifests.
-- **Incident Injection Engine:**
-  - `01-oomkilled`: Allocates memory stress pods exceeding resource limits to force Kubernetes evictions.
-  - `02-crashloop`: Deploys pods referencing non-existent secrets to simulate crash loops.
-  - `03-broken-routing`: Applies mismatched label selectors in Service specs to isolate workloads.
-- **Dynamic AI RCA:** Extracts real-time pod status, system events, and stdout/stderr logs from EKS and sends context to a local Ollama instance for diagnostic parsing — with a deterministic expert-system fallback so a diagnosis is always returned, even if the LLM is unreachable or returns a malformed response.
-- **Zero-Trust Diagnostic Terminal:** A restricted command shell for read-only cluster inspection (`kubectl get/describe/logs`, etc.), enforced server-side by a regex allowlist and a blocked-character filter — not just UI-level restrictions.
-- **Demo Mode:** The entire platform (frontend, backend, and RCA engine) runs against realistic mock data with zero AWS dependency, so anyone can evaluate the tool without provisioning cloud infrastructure.
-- **Lifecycle Safety:** Bash orchestration (`setup.sh` and `destroy.sh`) to automate cluster setup and safely purge workloads before running `terraform destroy`.
+The public demo is available through the hosted frontend:
 
----
+[Open the EKS Incident Simulator Demo](https://eks-incident-simulator-ai-diagnosti.vercel.app/)
 
-## 🔧 Engineering Highlights & Improvements
+The frontend communicates with the hosted backend API:
 
-1. **IAM Permissions Cleanup:** Removed unused AWS Bedrock IAM policies from Terraform configurations to adhere strictly to the Principle of Least Privilege (PoLP) — infrastructure now only grants what the running code actually uses.
-2. **API Payload Alignment:** Standardized API response schemas across FastAPI endpoints (including both the LLM and fallback RCA paths) to ensure reliable UI state rendering during asynchronous cluster mutations.
-3. **CORS Optimization:** Implemented explicit, credential-safe CORS middleware on FastAPI to handle cross-origin communications from the frontend.
-4. **Reliable Teardown Automation:** Built workload-purging mechanisms into `destroy.sh` to remove active Kubernetes resources before destroying infrastructure, preventing hanging AWS Elastic Network Interfaces (ENIs).
+[Open the Demo Backend](https://eks-incident-simulator-with-ai.onrender.com/)
 
----
+The hosted version runs in Demo Mode:
 
-## 🧭 Architecture Decisions & Trade-offs
+- It uses deterministic mock Kubernetes data.
+- It does not require AWS credentials.
+- It does not create AWS resources.
+- It does not modify a real EKS cluster.
+- It uses the same interface as the Live AWS deployment.
 
-- **Local LLM (Ollama) over AWS Bedrock:** The RCA engine intentionally targets a self-hosted Ollama model instead of a managed cloud LLM. This keeps the demo free to run repeatedly with no per-token cost and no extra IAM surface, at the cost of depending on local compute for AI-quality diagnostics. The fallback expert-system engine exists specifically to make this trade-off safe — a real diagnosis is always returned either way.
-- **Demo Mode as a first-class path:** `DEMO_MODE` is checked at the same point in the code as a live cluster-connection failure, so the mock and real paths share the exact same API contract. This was a deliberate choice so anyone visiting the hosted app gets the identical UI and RCA experience as a real AWS deployment.
+Because the backend uses Render's free hosting tier, it may take a few seconds to wake up after inactivity. The frontend communicates with the backend when it loads, so the first request may take longer than usual.
 
 ---
 
-## 🚀 Run It Yourself
+## Option A: Local Demo Mode
 
-Most people should just use the [live demo](#) above — nothing to install. These two options are for anyone who wants to run the code directly (e.g. to review it, extend it, or connect it to a real cluster).
+To run the mock version locally without AWS, start the backend with `DEMO_MODE=true`:
 
-### Option A: Demo Mode (No AWS Required)
-
-Same mock data as the live demo, running on your own machine:
-
-```bash
-# Backend
-cd backend
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-DEMO_MODE=true uvicorn app.main:app --reload --port 8000
-```
-
-```bash
-# Frontend (separate terminal)
-cd frontend
-npm install
-npm run dev
-```
-
-Open `http://localhost:5173` — everything runs against mock data, no AWS credentials required.
-
-### Option B: Full AWS/EKS Deployment
-
-Use this path to run the platform against a real, live Amazon EKS cluster.
-
-#### Prerequisites
-- Linux / Ubuntu / WSL environment.
-- AWS CLI configured with administrator privileges.
-- Terraform `>= 1.5.0`
-- Node.js (v18+) & Python 3.11+
-- Ollama running locally *(optional — without it, RCA automatically uses the deterministic expert-system fallback)*.
-
-#### Step 1: Provision Infrastructure
-```bash
-chmod +x scripts/setup.sh scripts/destroy.sh
-./scripts/setup.sh
-```
-
-#### Step 2: Backend
 ```bash
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8000
+DEMO_MODE=true uvicorn app.main:app --reload --port 8000
 ```
 
-#### Step 3: Frontend
+In a second terminal, start the frontend:
+
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-### Simulation & Diagnostic Workflow (both options)
-1. **Trigger Incident Scenarios:** Select a target scenario (`OOMKilled`, `CrashLoopBackOff`, or `Broken Routing`) from the dashboard UI.
-2. **Observe Cluster State:** The dashboard shows pod status transitions, eviction states, or routing failures in real time.
-3. **Generate AI RCA:** Click **Analyze** on an active incident to extract logs and Kubernetes event streams, passing this context to Ollama (or the fallback engine).
-4. **Review Diagnosis:** The engine returns root cause, operational impact, and a recommended fix back to the UI.
+The frontend usually opens at:
 
-#### Tear Down (Option B only)
-To clean up all AWS resources and avoid unexpected cloud charges:
+```text
+http://localhost:3000
+```
+
+If port `3000` is already in use, Vite automatically selects another available port and prints the exact URL in the terminal.
+
+Local Demo Mode does not require AWS credentials or a Kubernetes cluster.
+
+---
+
+## Option B: Full AWS / EKS Deployment
+
+Live Mode connects the backend to a real Kubernetes cluster.
+
+### Requirements
+
+- AWS CLI.
+- Terraform 1.5 or newer.
+- kubectl.
+- Python 3.11 or newer.
+- Node.js 18 or newer.
+- npm.
+- curl.
+- Linux, macOS, WSL, or another Bash-compatible environment.
+- AWS credentials with permission to create the required infrastructure.
+
+Before starting, verify that the AWS CLI is authenticated:
+
+```bash
+aws sts get-caller-identity
+```
+
+Review the Terraform configuration under:
+
+```text
+terraform/
+```
+
+Then run the setup script from the repository root:
+
+```bash
+chmod +x scripts/setup.sh scripts/destroy.sh
+./scripts/setup.sh
+```
+
+The setup script automatically:
+
+- Checks the required tools.
+- Runs Terraform.
+- Creates or updates the EKS infrastructure.
+- Updates the local kubeconfig.
+- Waits for Kubernetes to become available.
+- Creates `backend/.venv` if it does not exist.
+- Installs backend dependencies when needed.
+- Installs frontend dependencies when needed.
+- Starts the FastAPI backend.
+- Starts the Vite frontend.
+- Prints the actual localhost URLs.
+
+Typical output:
+
+```text
+Frontend: http://localhost:3000
+Backend:  http://localhost:8000
+API docs: http://localhost:8000/docs
+```
+
+If port `3000` is already in use, the script displays the alternative URL selected by Vite.
+
+---
+
+## Dependency Installation
+
+The setup script avoids unnecessary installations.
+
+For the backend:
+
+- `backend/.venv` is created only if it does not already exist.
+- Python dependencies are installed only when `requirements.txt` has changed.
+
+For the frontend:
+
+- `npm ci` runs only when `frontend/node_modules` is missing.
+- Existing frontend dependencies are reused on later runs.
+
+The normal workflow is simply:
+
+```bash
+./scripts/setup.sh
+```
+
+---
+
+## Stop and Destroy
+
+When the AWS environment is no longer needed, run:
+
 ```bash
 ./scripts/destroy.sh
 ```
+
+The destroy script automatically:
+
+- Stops the Vite frontend.
+- Stops the Uvicorn backend.
+- Removes Kubernetes workloads where possible.
+- Waits for related AWS resources to detach.
+- Runs `terraform destroy`.
+
+The script does not delete:
+
+```text
+backend/.venv
+frontend/node_modules
+```
+
+Those are local development dependencies and are preserved for the next setup.
+
+Always destroy unused AWS infrastructure to avoid unnecessary cloud charges.
+
+---
+
+## Security Notes
+
+This project is intended for controlled testing and educational use.
+
+- Never commit AWS access keys or private credentials.
+- Do not expose a live EKS-connected backend publicly without authentication.
+- Use a dedicated AWS account or sandbox environment.
+- Review remediation manifests before applying them.
+- Keep the terminal allowlist restrictive.
+- Do not run the simulator against production workloads.
+- Destroy unused AWS infrastructure after testing.
+
+The public hosted backend should remain in Demo Mode and should not receive credentials that can access a real AWS account or production Kubernetes cluster.
 
 ---
 
 ## 📜 License
 
-This project is licensed under the MIT License — see the `LICENSE` file for details.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
