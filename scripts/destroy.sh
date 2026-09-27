@@ -24,26 +24,33 @@ if [[ ! $REPLY =~ ^[Yy]$ ]]; then
   exit 0
 fi
 
-stop_local_services() {
-  if [[ -f "$BACKEND_PID_FILE" ]]; then
-    local pid
-    pid="$(cat "$BACKEND_PID_FILE" 2>/dev/null || true)"
-    if [[ -n "$pid" ]] && kill -0 "$pid" >/dev/null 2>&1; then
-      echo "Stopping local backend..."
-      kill "$pid" >/dev/null 2>&1 || true
-    fi
-    rm -f "$BACKEND_PID_FILE"
-  fi
+stop_process_group() {
+  local pid_file="$1"
+  local name="$2"
 
-  if [[ -f "$FRONTEND_PID_FILE" ]]; then
+  if [[ -f "$pid_file" ]]; then
     local pid
-    pid="$(cat "$FRONTEND_PID_FILE" 2>/dev/null || true)"
+    pid="$(cat "$pid_file" 2>/dev/null || true)"
+
     if [[ -n "$pid" ]] && kill -0 "$pid" >/dev/null 2>&1; then
-      echo "Stopping local frontend..."
-      kill "$pid" >/dev/null 2>&1 || true
+      echo "Stopping local $name (Process Group $pid)..."
+
+      # 1. ניסיון סגירה מנומס (SIGTERM) לכל עץ התהליכים
+      kill -15 -- "-$pid" 2>/dev/null || kill -15 "$pid" 2>/dev/null || true
+      sleep 1
+
+      # 2. אם התהליך עדיין חי - חיסול מיידי (SIGKILL)
+      if kill -0 "$pid" >/dev/null 2>&1; then
+        kill -9 -- "-$pid" 2>/dev/null || kill -9 "$pid" 2>/dev/null || true
+      fi
     fi
-    rm -f "$FRONTEND_PID_FILE"
+    rm -f "$pid_file"
   fi
+}
+
+stop_local_services() {
+  stop_process_group "$BACKEND_PID_FILE" "backend"
+  stop_process_group "$FRONTEND_PID_FILE" "frontend"
 }
 
 echo -e "\n🧹 Step 1/3: Stopping local services..."
