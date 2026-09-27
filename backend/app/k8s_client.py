@@ -352,12 +352,17 @@ class KubernetesManager:
 
     @staticmethod
     def _get_demo_terminal_output(command: str) -> str:
-        """Return deterministic output for the public demo."""
+        """Return deterministic output for the public demo.
+
+        Note: this returns only the raw command output, with no
+        "[DEMO OUTPUT]" prefix — the frontend already prepends
+        "[{mode} OUTPUT]" uniformly for DEMO/LIVE/OFFLINE, so adding
+        it here too caused a duplicated label in the terminal.
+        """
         normalized_command = command.strip()
 
         if normalized_command == "kubectl get pods":
             return (
-                "[DEMO OUTPUT]\n"
                 "NAME                              READY   STATUS             RESTARTS   AGE\n"
                 "api-service-8646b9657c-x92kl     0/1     OOMKilled          4          2m15s\n"
                 "auth-service-758dfc489d-p4l89     0/1     CrashLoopBackOff   3          1m40s\n"
@@ -366,7 +371,6 @@ class KubernetesManager:
 
         if normalized_command == "kubectl get services":
             return (
-                "[DEMO OUTPUT]\n"
                 "NAME              TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)   AGE\n"
                 "kubernetes        ClusterIP   10.100.0.1       <none>        443/TCP   12d\n"
                 "payment-service   ClusterIP   10.100.142.89    <none>        80/TCP    5m10s"
@@ -374,7 +378,6 @@ class KubernetesManager:
 
         if normalized_command == "kubectl get events":
             return (
-                "[DEMO OUTPUT]\n"
                 "LAST SEEN   TYPE      REASON      OBJECT                        MESSAGE\n"
                 "12s         Warning   OOMKilled   pod/api-service-8646b9657c    Memory limit of 64Mi exceeded.\n"
                 "45s         Warning   Failed      pod/auth-service-758dfc489d   Secret missing-db-secret was not found."
@@ -382,7 +385,6 @@ class KubernetesManager:
 
         if normalized_command == "kubectl get deployments":
             return (
-                "[DEMO OUTPUT]\n"
                 "NAME              READY   UP-TO-DATE   AVAILABLE   AGE\n"
                 "api-service       0/1     1            0           2m15s\n"
                 "auth-service      0/1     1            0           1m40s\n"
@@ -391,7 +393,6 @@ class KubernetesManager:
 
         if normalized_command == "kubectl get nodes":
             return (
-                "[DEMO OUTPUT]\n"
                 "NAME                         STATUS   ROLES    AGE   VERSION\n"
                 "demo-node-1                 Ready    <none>   12d   v1.29.0\n"
                 "demo-node-2                 Ready    <none>   12d   v1.29.0"
@@ -399,13 +400,11 @@ class KubernetesManager:
 
         if normalized_command == "kubectl cluster-info":
             return (
-                "[DEMO OUTPUT]\n"
                 "Kubernetes control plane is running in simulated demo mode.\n"
                 "No AWS or Kubernetes resources were contacted."
             )
 
         return (
-            "[DEMO OUTPUT]\n"
             f"Simulated output for command: {normalized_command}\n"
             "No live Kubernetes cluster was contacted."
         )

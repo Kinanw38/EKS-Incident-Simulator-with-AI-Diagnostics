@@ -1,3 +1,4 @@
+================================================
 # EKS Incident Simulator with AI Diagnostics
  
 ![AWS](https://img.shields.io/badge/AWS-232F3E?style=for-the-badge&logo=amazon-aws&logoColor=white)
@@ -229,21 +230,36 @@ Because the backend uses Render's free hosting tier, it may take a few seconds t
 
 ## Option A: Local Demo Mode
 
-To run the mock version locally without AWS, start the backend with `DEMO_MODE=true`:
+To run the mock version locally without AWS, set up the backend once:
 
 ```bash
+# One-time setup — only needed the first time, or after deleting .venv
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+```
+
+Then, every time you want to run it:
+
+```bash
+cd backend
+source .venv/bin/activate
 DEMO_MODE=true uvicorn app.main:app --reload --port 8000
 ```
 
-In a second terminal, start the frontend:
+In a second terminal, set up the frontend once:
+
+```bash
+# One-time setup — only needed the first time, or after deleting node_modules
+cd frontend
+npm install
+```
+
+Then, every time you want to run it:
 
 ```bash
 cd frontend
-npm install
 npm run dev
 ```
 

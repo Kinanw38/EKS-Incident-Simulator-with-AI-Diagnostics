@@ -132,10 +132,13 @@ export default function App() {
 
   const addToast = (type, title, message) => {
     const id = Date.now() + Math.random();
-    setToasts((previous) => [
-      ...previous,
-      { id, type, title, message }
-    ]);
+    setToasts((previous) => {
+      // Cap the array itself at 3, not just what's rendered — otherwise
+      // dismissing a visible toast can "resurface" an older one that was
+      // sitting in state but never actually shown.
+      const next = [...previous, { id, type, title, message }];
+      return next.length > 3 ? next.slice(next.length - 3) : next;
+    });
   };
 
   const removeToast = (id) => {

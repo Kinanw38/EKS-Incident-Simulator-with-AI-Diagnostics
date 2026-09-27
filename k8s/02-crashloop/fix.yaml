@@ -5,7 +5,7 @@ metadata:
   namespace: default
 type: Opaque
 stringData:
-  password: "SuperSecretPassword123!"
+  password: "demo-placeholder-not-a-real-secret"
 ---
 apiVersion: apps/v1
 kind: Deployment
