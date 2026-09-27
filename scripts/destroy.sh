@@ -51,9 +51,14 @@ stop_local_services
 
 echo -e "\n🧹 Step 2/3: Cleaning Kubernetes workloads to release AWS dependencies..."
 if kubectl get nodes &> /dev/null; then
-  kubectl delete deployments,services,pods,configmaps,secrets --all --all-namespaces --ignore-not-found=true || true
-  echo "⏳ Waiting for AWS resources to detach..."
-  sleep 20
+  kubectl delete deployments,statefulsets,daemonsets,services,ingress,pods,configmaps,secrets --all --all-namespaces --ignore-not-found=true || true
+
+  echo "⏳ Waiting 45 seconds for AWS VPC CNI and Load Balancers to release Subnet ENIs..."
+  for ((i=45; i>0; i--)); do
+    echo -ne "   Time remaining: ${i}s...\r"
+    sleep 1
+  done
+  echo -e "\n✅ ENI release wait period complete. Proceeding to Terraform destroy."
 else
   echo "⚠️ Unable to query cluster via kubectl. Proceeding directly to Terraform destroy..."
 fi
