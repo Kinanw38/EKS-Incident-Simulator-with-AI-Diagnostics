@@ -38,8 +38,12 @@ resource "aws_eks_cluster" "main" {
 
   enabled_cluster_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
 
+  # Explicit network dependencies to prevent dependency/subnet locking during teardown
   depends_on = [
-    aws_iam_role_policy_attachment.cluster_AmazonEKSClusterPolicy
+    aws_iam_role_policy_attachment.cluster_AmazonEKSClusterPolicy,
+    aws_internet_gateway.gw,
+    aws_route_table_association.public,
+    aws_route_table_association.private
   ]
 }
 
@@ -96,4 +100,3 @@ resource "aws_eks_node_group" "main" {
     aws_route_table_association.private
   ]
 }
-
