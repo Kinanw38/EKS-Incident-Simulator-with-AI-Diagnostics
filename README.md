@@ -178,30 +178,38 @@ OFFLINE
 
 ## 📸 Screenshots
 
-<p align="center">
-  <img
-    src="assets/screenshots/dashboard-overview.png"
-    alt="EKS Incident Simulator dashboard overview"
-    width="49%"
-  />
-  <img
-    src="assets/screenshots/incident-lab.png"
-    alt="Kubernetes incident simulation lab"
-    width="49%"
-  />
-</p>
+### 📊 Dashboard Overview
+Provides high-level cluster visibility, displaying node health, workload availability, and real-time status across the environment.
 
 <p align="center">
-  <img
-    src="assets/screenshots/ai-rca-result.png"
-    alt="AI root cause analysis result"
-    width="49%"
-  />
-  <img
-    src="assets/screenshots/zero-trust-terminal.png"
-    alt="Zero-Trust interactive terminal"
-    width="49%"
-  />
+  <img src="assets/screenshots/dashboard-overview.png" alt="Dashboard Overview" width="100%" />
+</p>
+
+---
+
+### 🧪 Incident Simulation Lab
+Allows engineers to trigger controlled failure scenarios (OOMKilled, CrashLoopBackOff, Broken Routing) to simulate real-world SRE incidents.
+
+<p align="center">
+  <img src="assets/screenshots/incident-lab.png" alt="Incident Lab" width="100%" />
+</p>
+
+---
+
+### 🧠 AI Root Cause Analysis (RCA)
+Collects cluster logs and events to automatically generate structured root-cause diagnostics and recommended remediation steps.
+
+<p align="center">
+  <img src="assets/screenshots/ai-rca-result.png" alt="AI RCA Result" width="100%" />
+</p>
+
+---
+
+### 🔒 Zero-Trust Interactive Terminal
+Provides a secure in-browser CLI for inspecting cluster resources using a strict backend command allowlist.
+
+<p align="center">
+  <img src="assets/screenshots/zero-trust-terminal.png" alt="Zero Trust Terminal" width="100%" />
 </p>
 
 ---
