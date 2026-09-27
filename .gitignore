@@ -61,6 +61,13 @@ htmlcov/
 package-lock.json.bak
 
 # ==========================================
+# Runtime artifacts from setup.sh / destroy.sh
+# (backend.pid / frontend.pid change on every run — never commit these)
+# ==========================================
+.logs/
+*.pid
+
+# ==========================================
 # IDEs & System Garbage
 # ==========================================
 .idea/
@@ -87,3 +94,4 @@ Thumbs.db
 # ==========================================
 ai-project-context.txt
 terraformfiles.txt
+kinanw38-eks-incident-simulator*.txt
