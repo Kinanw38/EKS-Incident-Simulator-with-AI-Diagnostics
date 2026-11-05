@@ -1,6 +1,7 @@
 import logging
 import math
 import os
+import random
 import shlex
 import subprocess
 import time
@@ -12,6 +13,19 @@ from kubernetes.client.rest import ApiException
 
 logger = logging.getLogger(__name__)
 
+
+
+def _demo_wobble(base: float, now: float, seed: int, amplitude: float) -> float:
+    """Believable, irregular movement for the simulated demo numbers.
+
+    Two slow waves plus a jump that changes every ~3 seconds. It depends only
+    on the clock (no stored state), so every visitor sees a similar picture
+    and tests can check the allowed range.
+    """
+    slow = math.sin(now / 17 + seed) + 0.6 * math.sin(now / 5.3 + 2 * seed)
+    jump = random.Random(int(now // 3) * 10 + seed).uniform(-1, 1)
+    value = base + amplitude * (0.45 * slow + 0.55 * jump)
+    return round(min(max(value, 1.0), 99.0), 1)
 
 
 def _percent(part: float, total: float):
@@ -26,8 +40,11 @@ def _parse_cpu_cores(value) -> float:
     if not value:
         return 0.0
     text = str(value)
-    if text.endswith("m"):
-        return float(text[:-1]) / 1000
+    # metrics-server reports usage in nanocores ("123456789n"); node and pod
+    # specs use millicores ("250m") or plain cores ("2").
+    scale = {"n": 1e9, "u": 1e6, "m": 1e3}
+    if text[-1] in scale:
+        return float(text[:-1]) / scale[text[-1]]
     return float(text)
 
 
@@ -103,6 +120,7 @@ class KubernetesManager:
         self.v1 = None
         self.apps_v1 = None
         self.discovery_v1 = None
+        self.custom_objects = None
         self.connection_error = None
 
         self.force_demo = (
@@ -133,6 +151,7 @@ class KubernetesManager:
             self.v1 = client.CoreV1Api()
             self.apps_v1 = client.AppsV1Api()
             self.discovery_v1 = client.DiscoveryV1Api()
+            self.custom_objects = client.CustomObjectsApi()
 
             # Verify that the API server is reachable and credentials work.
             self.v1.list_namespace(_request_timeout=5)
@@ -225,8 +244,7 @@ class KubernetesManager:
         """
         if self.force_demo:
             profile = DEMO_METRIC_PROFILES.get(incident, DEMO_METRIC_PROFILES[None])
-            # A slow, small wave so the demo looks alive without randomness.
-            wave = math.sin(time.time() / 30)
+            now = time.time()
             return {
                 "mode": "demo",
                 "simulated": True,
@@ -236,8 +254,8 @@ class KubernetesManager:
                 "pods": dict(profile["pods"]),
                 "capacity": {"cpu_cores": 4.0, "memory_gib": 7.4},
                 "usage": {
-                    "cpu_percent": round(profile["cpu"] + 3 * wave, 1),
-                    "memory_percent": round(profile["memory"] + 2 * wave, 1),
+                    "cpu_percent": _demo_wobble(profile["cpu"], now, 1, 9),
+                    "memory_percent": _demo_wobble(profile["memory"], now, 2, 5),
                 },
                 "reserved": {
                     "cpu_percent": profile["reserved"][0],
@@ -302,6 +320,8 @@ class KubernetesManager:
                 if node.status.allocatable
             )
 
+            usage = self._read_node_usage(nodes)
+
             return {
                 "mode": "live",
                 "simulated": False,
@@ -318,7 +338,7 @@ class KubernetesManager:
                     "cpu_cores": round(cpu, 2),
                     "memory_gib": round(memory, 2),
                 },
-                "usage": {"cpu_percent": None, "memory_percent": None},
+                "usage": usage,
                 # What pods have RESERVED (their requests) versus what the
                 # nodes can allocate. Real data, no metrics-server needed.
                 "reserved": {
@@ -334,6 +354,44 @@ class KubernetesManager:
                 "available": False,
                 "message": f"The Kubernetes API request failed: {exc}",
             }
+
+    def _read_node_usage(self, nodes) -> dict:
+        """Real CPU/memory usage from metrics-server, or None values.
+
+        metrics-server takes about a minute after setup to return data, and
+        may be missing on clusters not created by setup.sh. Either way this
+        returns None values instead of raising, and the dashboard falls back
+        to the "reserved" numbers.
+        """
+        empty = {"cpu_percent": None, "memory_percent": None}
+
+        try:
+            response = self.custom_objects.list_cluster_custom_object(
+                "metrics.k8s.io", "v1beta1", "nodes", _request_timeout=5
+            )
+            reported = {
+                item["metadata"]["name"]: item["usage"]
+                for item in response.get("items", [])
+            }
+        except Exception:
+            return empty
+
+        used_cpu = used_memory = total_cpu = total_memory = 0.0
+        for node in nodes:
+            usage = reported.get(node.metadata.name)
+            if usage is None or not node.status.allocatable:
+                continue
+            used_cpu += _parse_cpu_cores(usage.get("cpu"))
+            used_memory += _parse_memory_gib(usage.get("memory"))
+            total_cpu += _parse_cpu_cores(node.status.allocatable.get("cpu"))
+            total_memory += _parse_memory_gib(
+                node.status.allocatable.get("memory")
+            )
+
+        return {
+            "cpu_percent": _percent(used_cpu, total_cpu),
+            "memory_percent": _percent(used_memory, total_memory),
+        }
 
     def get_service_endpoints_summary(
         self,

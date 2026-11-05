@@ -167,6 +167,38 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedScenario?.id]);
 
+  // The simulated demo numbers move at irregular intervals (2-5 seconds) so
+  // the dashboard feels alive. Live numbers come from the real cluster and
+  // already refresh with the 10-second health check, so they are not polled
+  // faster. Polling pauses while the tab is hidden or another tab is open.
+  const metricsSimulated = metrics?.simulated === true;
+
+  useEffect(() => {
+    if (!metricsSimulated || activeTab !== "overview" || initialLoading) {
+      return undefined;
+    }
+
+    let timer;
+    let cancelled = false;
+
+    const schedule = () => {
+      timer = window.setTimeout(async () => {
+        if (!document.hidden) {
+          await fetchMetrics();
+        }
+        if (!cancelled) schedule();
+      }, 2000 + Math.random() * 3000);
+    };
+
+    schedule();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [metricsSimulated, activeTab, initialLoading]);
+
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
 
@@ -1473,14 +1505,13 @@ function UsageBar({ label, icon: Icon, percent, simulated }) {
           {label}
         </span>
 
-        <span className="font-mono text-zinc-200">
+        <span className="text-sm font-semibold tabular-nums text-zinc-100">
           {known ? `${percent}%` : "n/a"}
-          {known && simulated ? " (simulated)" : ""}
         </span>
       </div>
 
       <div
-        className="h-2 overflow-hidden rounded-full bg-zinc-800"
+        className="h-2.5 overflow-hidden rounded-full bg-zinc-800"
         role="progressbar"
         aria-label={label}
         aria-valuenow={known ? percent : undefined}
@@ -1613,11 +1644,10 @@ function MetricsPanel({ metrics }) {
         />
 
         <MetricTile
-          className="col-span-2 sm:col-span-1"
           icon={Cpu}
           label="Capacity"
-          value={`${capacity.cpu_cores} vCPU / ${capacity.memory_gib} GiB`}
-          sub={`${nodes.ready}/${nodes.total} nodes Ready`}
+          value={`${capacity.cpu_cores} vCPU`}
+          sub={`${capacity.memory_gib} GiB RAM, ${nodes.ready}/${nodes.total} nodes Ready`}
         />
       </div>
     </div>
@@ -1641,7 +1671,7 @@ function MetricTile({
         {label}
       </div>
 
-      <p className="mt-1.5 wrap-break-word font-mono text-sm font-semibold text-zinc-100">
+      <p className="mt-1.5 wrap-break-word text-base font-semibold tabular-nums text-zinc-100">
         {value}
       </p>
 
@@ -1664,7 +1694,7 @@ function StatCard({
         <Icon className={`h-4 w-4 ${iconClass}`} />
       </div>
 
-      <p className="font-mono text-2xl font-bold text-zinc-100">
+      <p className="text-3xl font-semibold tabular-nums tracking-tight text-zinc-100">
         {value}
       </p>
 

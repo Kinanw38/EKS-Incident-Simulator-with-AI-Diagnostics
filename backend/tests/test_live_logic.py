@@ -15,6 +15,11 @@ def make_live_manager():
     manager.v1 = MagicMock()
     manager.apps_v1 = MagicMock()
     manager.discovery_v1 = MagicMock()
+    manager.custom_objects = MagicMock()
+    # By default there is no metrics-server, like a cluster that never had one.
+    manager.custom_objects.list_cluster_custom_object.side_effect = Exception(
+        "the server could not find the requested resource"
+    )
     return manager
 
 
@@ -145,6 +150,7 @@ def _pod(phase, restarts, cpu="100m", memory="128Mi"):
 def test_live_metrics_use_real_counts_and_no_fake_usage():
     manager = make_live_manager()
     node = SimpleNamespace(
+        metadata=SimpleNamespace(name="node-1"),
         status=SimpleNamespace(
             conditions=[SimpleNamespace(type="Ready", status="True")],
             allocatable={"cpu": "1930m", "memory": "3Gi"},
@@ -176,6 +182,7 @@ def test_quantity_parsers():
 
     assert _parse_cpu_cores("250m") == 0.25
     assert _parse_cpu_cores("2") == 2.0
+    assert _parse_cpu_cores("500000000n") == 0.5
     assert _parse_memory_gib("1Gi") == 1.0
     assert _parse_memory_gib("512Mi") == 0.5
     assert round(_parse_memory_gib("1G"), 3) == 0.931
@@ -190,3 +197,32 @@ def test_metrics_unavailable_when_not_connected():
 
     assert result["available"] is False
     assert result["mode"] == "unavailable"
+
+
+def test_live_usage_comes_from_metrics_server_when_available():
+    manager = make_live_manager()
+    node = SimpleNamespace(
+        metadata=SimpleNamespace(name="node-1"),
+        status=SimpleNamespace(
+            conditions=[SimpleNamespace(type="Ready", status="True")],
+            allocatable={"cpu": "2", "memory": "4Gi"},
+        ),
+    )
+    manager.v1.list_node.return_value = SimpleNamespace(items=[node])
+    manager.v1.list_pod_for_all_namespaces.return_value = SimpleNamespace(
+        items=[]
+    )
+    manager.custom_objects.list_cluster_custom_object.side_effect = None
+    manager.custom_objects.list_cluster_custom_object.return_value = {
+        "items": [
+            {
+                "metadata": {"name": "node-1"},
+                # 500 millicores = 25% of 2 cores; 1Gi = 25% of 4Gi
+                "usage": {"cpu": "500000000n", "memory": "1048576Ki"},
+            }
+        ]
+    }
+
+    result = manager.get_metrics_summary()
+
+    assert result["usage"] == {"cpu_percent": 25.0, "memory_percent": 25.0}

@@ -179,7 +179,7 @@ OFFLINE
 ## 📸 Screenshots
 
 ### 📊 Dashboard Overview
-Provides high-level cluster visibility: node health, pod counts, restarts, capacity, and CPU/memory gauges. In Demo Mode the gauges are clearly labelled as simulated and follow the active incident (for example memory climbs and restarts appear during an OOMKilled incident, and return to normal after remediation); in Live Mode only values the Kubernetes API really provides are shown (live CPU/memory usage would need metrics-server, which is not installed, so Live Mode shows what pods have reserved through their resource requests compared with the nodes' allocatable capacity instead). A light/dark theme toggle is in the top bar.
+Provides high-level cluster visibility: node health, pod counts, restarts, capacity, and CPU/memory gauges. In Demo Mode the gauges are clearly labelled as simulated and follow the active incident (for example memory climbs and restarts appear during an OOMKilled incident, and return to normal after remediation); in Live Mode only values the Kubernetes API really provides are shown (live CPU/memory usage comes from metrics-server, which `scripts/setup.sh` installs from the pinned manifest in `k8s/metrics-server/`; until it reports, or if it is missing, Live Mode shows what pods have reserved through their resource requests compared with the nodes' allocatable capacity instead). A light/dark theme toggle is in the top bar.
 
 <p align="center">
   <img src="assets/screenshots/dashboard-overview.png" alt="Dashboard Overview" width="100%" />
@@ -333,6 +333,7 @@ The setup script automatically:
 - Creates or updates the EKS infrastructure.
 - Updates the local kubeconfig.
 - Waits for Kubernetes to become available.
+- Installs metrics-server (one small pod, no extra AWS cost) so the dashboard can show real CPU and memory usage.
 - Creates `backend/.venv` if it does not exist.
 - Installs backend dependencies when needed.
 - Installs frontend dependencies when needed.
