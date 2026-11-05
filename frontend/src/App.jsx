@@ -554,33 +554,37 @@ export default function App() {
     {
       id: "overview",
       label: "System Overview",
+      short: "Overview",
       icon: LayoutDashboard
     },
     {
       id: "lab",
       label: "K8s Testing Lab",
+      short: "Lab",
       icon: FlaskConical
     },
     {
       id: "ai",
       label: "AI RCA & Patching",
+      short: "AI RCA",
       icon: BrainCircuit
     },
     {
       id: "terminal",
       label: "Zero-Trust Terminal",
+      short: "Terminal",
       icon: TerminalIcon
     }
   ];
 
   return (
-    <div className="flex h-screen overflow-hidden bg-zinc-950 font-sans text-zinc-100">
+    <div className="flex h-dvh overflow-hidden bg-zinc-950 font-sans text-zinc-100">
       <ToastContainer
         toasts={toasts}
         removeToast={removeToast}
       />
 
-      <aside className="flex w-64 shrink-0 flex-col justify-between border-r border-zinc-800/80 bg-zinc-950">
+      <aside className="hidden w-64 shrink-0 flex-col justify-between border-r border-zinc-800/80 bg-zinc-950 md:flex">
         <div>
           <div className="flex items-center gap-3 border-b border-zinc-800/80 p-5">
             <div className="shrink-0 rounded-lg border border-blue-500/20 bg-blue-600/10 p-2 text-blue-400">
@@ -657,8 +661,23 @@ export default function App() {
       </aside>
 
       <main className="min-w-0 flex-1 overflow-y-auto bg-zinc-950">
-        <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-zinc-800/80 bg-zinc-950/90 px-6 backdrop-blur-sm">
-          <div className="flex min-w-0 items-center gap-2 font-mono text-xs text-zinc-500">
+        <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-3 border-b border-zinc-800/80 bg-zinc-950/90 px-4 backdrop-blur-sm sm:px-6">
+          <div className="flex min-w-0 items-center gap-2 md:hidden">
+            <div className="shrink-0 rounded-md border border-blue-500/20 bg-blue-600/10 p-1.5 text-blue-400">
+              <BrainCircuit className="h-4 w-4" />
+            </div>
+
+            <span className="truncate text-sm font-bold">EKS RCA</span>
+
+            <span
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[10px] ${modeClasses.badge}`}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${modeClasses.dot}`} />
+              {modeLabel}
+            </span>
+          </div>
+
+          <div className="hidden min-w-0 items-center gap-2 font-mono text-xs text-zinc-500 md:flex">
             <span>cluster</span>
             <span>/</span>
 
@@ -692,7 +711,8 @@ export default function App() {
             type="button"
             onClick={() => fetchClusterHealth()}
             disabled={healthLoading}
-            className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-400 transition hover:border-zinc-700 hover:bg-zinc-800 hover:text-zinc-200 disabled:cursor-wait disabled:opacity-70"
+            aria-label="Refresh state"
+          className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-400 transition hover:border-zinc-700 hover:bg-zinc-800 hover:text-zinc-200 disabled:cursor-wait disabled:opacity-70"
           >
             <RefreshCw
               className={`h-3.5 w-3.5 ${
@@ -700,12 +720,14 @@ export default function App() {
               }`}
             />
 
-            {healthLoading ? "Refreshing..." : "Refresh State"}
+            <span className="hidden sm:inline">
+              {healthLoading ? "Refreshing..." : "Refresh State"}
+            </span>
           </button>
           </div>
         </header>
 
-        <div className="mx-auto w-full max-w-6xl space-y-8 p-6 md:p-10">
+        <div className="mx-auto w-full max-w-6xl space-y-8 p-4 pb-24 sm:p-6 sm:pb-24 md:p-10">
           {initialLoading ? (
             <div
               key="initial-loading"
@@ -773,6 +795,31 @@ export default function App() {
           )}
         </div>
       </main>
+
+      <nav
+        aria-label="Main navigation"
+        className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-zinc-800/80 bg-zinc-950/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-sm md:hidden"
+      >
+        {navigationItems.map((item) => {
+          const Icon = item.icon;
+          const active = activeTab === item.id;
+
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setActiveTab(item.id)}
+              aria-current={active ? "page" : undefined}
+              className={`flex flex-col items-center gap-1 px-1 py-2.5 text-[10px] font-medium ${
+                active ? "text-blue-400" : "text-zinc-500"
+              }`}
+            >
+              <Icon className="h-5 w-5" />
+              <span className="max-w-full truncate">{item.short}</span>
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 }

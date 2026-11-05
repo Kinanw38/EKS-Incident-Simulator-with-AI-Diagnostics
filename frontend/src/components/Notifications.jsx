@@ -107,7 +107,7 @@ export default function ToastContainer({ toasts, removeToast }) {
   const visibleToasts = toasts.slice(-3);
 
   return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-100 flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-2.5 sm:bottom-6 sm:right-6">
+    <div className="pointer-events-none fixed bottom-20 right-4 z-100 md:bottom-6 flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-2.5 sm:right-6">
       {visibleToasts.map((toast) => (
         <Toast
           key={toast.id}
