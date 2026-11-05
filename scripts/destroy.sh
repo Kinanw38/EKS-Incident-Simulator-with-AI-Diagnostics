@@ -360,10 +360,10 @@ if [[ -n "$CLUSTER_NAME" ]] && command -v kubectl >/dev/null 2>&1; then
   entry="arn:aws:eks:${AWS_REGION_VALUE}:${ACCOUNT_ID}:cluster/${CLUSTER_NAME}"
   removed=false
   for name in "$entry" "$CLUSTER_NAME"; do
-    if kubectl config get-contexts -o name 2>/dev/null | grep -qx "$name"; then
+    if kubectl config get-contexts -o name 2>/dev/null | grep -x "$name" >/dev/null; then
       kubectl config delete-context "$name" >/dev/null 2>&1 && removed=true
     fi
-    if kubectl config get-clusters 2>/dev/null | grep -qx "$name"; then
+    if kubectl config get-clusters 2>/dev/null | grep -x "$name" >/dev/null; then
       kubectl config delete-cluster "$name" >/dev/null 2>&1 && removed=true
     fi
     kubectl config unset "users.${name}" >/dev/null 2>&1 || true
