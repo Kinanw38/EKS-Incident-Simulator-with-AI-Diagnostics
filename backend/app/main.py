@@ -13,7 +13,7 @@ from .security import is_command_allowed
 
 app = FastAPI(
     title="AI Incident Simulator Control Plane",
-    version="1.0.0",
+    version="2.0.0",
     description=(
         "Backend API for managing Kubernetes incident scenarios, "
         "live telemetry analysis, secure inspection commands, "

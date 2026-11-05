@@ -24,15 +24,51 @@ REQUIREMENTS_STAMP="$BACKEND_DIR/.venv/.requirements-installed"
 BACKEND_PORT="${BACKEND_PORT:-8000}"
 FRONTEND_PORT="${FRONTEND_PORT:-3000}"
 
+ASSUME_YES=false
+for arg in "$@"; do
+  case "$arg" in
+    -y|--yes) ASSUME_YES=true ;;
+    -h|--help)
+      echo "Usage: ./scripts/setup.sh [--yes]"
+      echo "  --yes  skip the confirmation questions"
+      exit 0
+      ;;
+    *)
+      echo "Unknown option: $arg" >&2
+      exit 1
+      ;;
+  esac
+done
+
+# Updated before every phase, so the error message can say what failed.
+CURRENT_PHASE="starting"
+
 mkdir -p "$LOG_DIR"
 
 print_error() { echo -e "${RED}❌ $1${NC}" >&2; }
 print_warning() { echo -e "${YELLOW}⚠️  $1${NC}"; }
 print_success() { echo -e "${GREEN}✅ $1${NC}"; }
 
-cleanup_on_error() {
-  print_error "Setup failed."
+TOTAL_STEPS=8
+
+# Prints a clear header for each phase: what is happening and why.
+step() {
+  local number="$1"
+  local title="$2"
+  local why="$3"
   echo
+  echo -e "${BLUE}━━━ Step ${number}/${TOTAL_STEPS}: ${title} ━━━${NC}"
+  echo "    ${why}"
+}
+
+cleanup_on_error() {
+  print_error "Setup failed during phase: ${CURRENT_PHASE}."
+  echo
+  if [[ "$CURRENT_PHASE" == "terraform apply" || "$CURRENT_PHASE" == "terraform import" ]]; then
+    print_warning "Terraform may have created some AWS resources before failing."
+    echo "To avoid paying for leftovers, run: ./scripts/destroy.sh"
+    echo
+  fi
   echo "Check the following logs if a service failed:"
   echo "  Backend:  $BACKEND_LOG"
   echo "  Frontend: $FRONTEND_LOG"
@@ -75,15 +111,69 @@ stop_stale_process() {
 }
 
 check_prerequisites() {
-  echo
-  echo "🔍 Checking required tools..."
+  step 1 "Checking your tools" "Terraform builds the cluster, aws/kubectl talk to it, python/npm run the app."
   require_command terraform
   require_command aws
   require_command kubectl
   require_command python3
   require_command npm
   require_command curl
+  check_terraform_version
   print_success "All required tools are available."
+}
+
+# Terraform >= 1.9 is needed (variable validation that references other variables).
+check_terraform_version() {
+  local version major minor
+  version="$(terraform version | head -n 1 | sed -E 's/^Terraform v([0-9]+\.[0-9]+).*/\1/')"
+  major="${version%%.*}"
+  minor="${version#*.}"
+  if (( major < 1 || (major == 1 && minor < 9) )); then
+    print_error "Terraform 1.9 or newer is required (found $version)."
+    exit 1
+  fi
+}
+
+ask_yes_no() {
+  local question="$1"
+  if [[ "$ASSUME_YES" == "true" ]]; then
+    return 0
+  fi
+  local answer
+  read -r -p "$question [y/N] " answer
+  [[ "$answer" =~ ^[Yy]$ ]]
+}
+
+confirm_account_and_cost() {
+  CURRENT_PHASE="AWS identity check"
+  step 2 "Confirming your AWS account" "So you never create resources in the wrong account by accident."
+  local account region
+  account="$(aws sts get-caller-identity --query Account --output text)"
+  region="${AWS_REGION:-${AWS_DEFAULT_REGION:-$(aws configure get region 2>/dev/null || true)}}"
+  region="${region:-us-east-1 (Terraform default)}"
+
+  echo "  AWS account: $account"
+  echo "  Region:      $region"
+  echo
+  echo "💰 Approximate cost while the cluster is running: about 0.23-0.25 USD per hour"
+  echo "   (roughly 5-6 USD per day). Main parts:"
+  echo "  - EKS control plane   ~ 0.10 USD/h"
+  echo "  - NAT gateway         ~ 0.045 USD/h + data transfer"
+  echo "  - 2 x t3.medium nodes ~ 0.08 USD/h"
+  echo "  - public IPv4 addresses, logs, and similar small items"
+  print_warning "Leaving the cluster running burns money (or credits) fast."
+  echo "Run ./scripts/destroy.sh as soon as you are done. This is an estimate, not a bill."
+  echo
+
+  if ! ask_yes_no "Create these resources in account $account?"; then
+    echo "Cancelled. Nothing was created."
+    exit 0
+  fi
+}
+
+# Fail early with a clear message if a port is already used by something else.
+port_in_use() {
+  (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null
 }
 
 # The EKS API endpoint is public, so we restrict it to the caller's own IP.
@@ -104,9 +194,35 @@ detect_allowed_cidr() {
   echo "${ip}/32"
 }
 
+# Older runs let EKS create the CloudWatch log group by itself, so it can
+# survive "terraform destroy". If it exists in AWS but Terraform does not
+# know it, "terraform apply" would fail with "already exists". Importing
+# adopts the existing group into the state instead.
+import_existing_log_group() {
+  local allowed_cidr="$1"
+  local cluster_name log_group address
+  cluster_name="$(echo 'var.cluster_name' | terraform console | tr -d '"[:space:]')"
+  log_group="/aws/eks/${cluster_name}/cluster"
+  address="aws_cloudwatch_log_group.cluster"
+
+  if terraform state list 2>/dev/null | grep -qx "$address"; then
+    return 0
+  fi
+
+  local found
+  found="$(aws logs describe-log-groups \
+    --log-group-name-prefix "$log_group" \
+    --query "logGroups[?logGroupName=='${log_group}'].logGroupName" \
+    --output text)"
+
+  if [[ "$found" == "$log_group" ]]; then
+    print_warning "Log group $log_group already exists outside Terraform; importing it."
+    terraform import -var "public_access_cidrs=[\"${allowed_cidr}\"]" "$address" "$log_group"
+  fi
+}
+
 provision_infrastructure() {
-  echo
-  echo -e "${BLUE}📦 Provisioning AWS infrastructure with Terraform...${NC}"
+  step 3 "Building the AWS infrastructure" "Terraform creates the network, the EKS cluster and the worker nodes. This usually takes 10-15 minutes, please wait."
 
   local allowed_cidr
   if ! allowed_cidr="$(detect_allowed_cidr)"; then
@@ -121,7 +237,13 @@ provision_infrastructure() {
 
   cd "$TERRAFORM_DIR"
 
+  CURRENT_PHASE="terraform init"
   terraform init
+
+  CURRENT_PHASE="terraform import"
+  import_existing_log_group "$allowed_cidr"
+
+  CURRENT_PHASE="terraform apply"
   terraform apply -auto-approve -var "public_access_cidrs=[\"${allowed_cidr}\"]"
 
   CLUSTER_NAME="$(terraform output -raw cluster_name)"
@@ -140,35 +262,21 @@ provision_infrastructure() {
   echo "Region:  $AWS_REGION"
 
   echo
-  echo "🔗 Updating local kubeconfig..."
+  CURRENT_PHASE="kubeconfig update"
+  step 4 "Connecting kubectl to the new cluster" "Adds the cluster to ~/.kube/config so kubectl knows where to send commands."
   aws eks update-kubeconfig --region "$AWS_REGION" --name "$CLUSTER_NAME"
 }
 
 wait_for_kubernetes() {
-  echo
-  echo "🩺 Waiting for the Kubernetes API..."
-  local max_attempts=30
-  local attempt=1
-
-  while ! kubectl get nodes >/dev/null 2>&1; do
-    if (( attempt >= max_attempts )); then
-      print_error "Kubernetes API did not become ready in time."
-      echo "Run this manually to investigate:"
-      echo "  kubectl get nodes"
-      exit 1
-    fi
-
-    echo "Waiting for Kubernetes API... attempt $attempt/$max_attempts"
-    sleep 10
-    attempt=$((attempt + 1))
-  done
-
-  print_success "Kubernetes API is reachable."
+  CURRENT_PHASE="waiting for Kubernetes nodes"
+  step 5 "Waiting for the worker nodes" "The cluster is only usable when every node reports Ready (waits up to 5 minutes)."
+  kubectl wait --for=condition=Ready nodes --all --timeout=300s
+  print_success "Kubernetes nodes are Ready."
 }
 
 prepare_backend() {
-  echo
-  echo "🐍 Preparing Python backend environment..."
+  CURRENT_PHASE="backend preparation"
+  step 6 "Preparing the Python backend" "Creates a private virtual environment and installs the pinned dependencies."
 
   if [[ ! -d "$BACKEND_DIR/.venv" ]]; then
     python3 -m venv "$BACKEND_DIR/.venv"
@@ -181,7 +289,11 @@ prepare_backend() {
   source "$BACKEND_DIR/.venv/bin/activate"
 
   local requirements_hash
-  requirements_hash="$(sha256sum "$BACKEND_DIR/requirements.txt" | awk '{print $1}')"
+  if command_exists sha256sum; then
+    requirements_hash="$(sha256sum "$BACKEND_DIR/requirements.txt" | awk '{print $1}')"
+  else
+    requirements_hash="$(shasum -a 256 "$BACKEND_DIR/requirements.txt" | awk '{print $1}')"
+  fi
 
   local installed_hash=""
   if [[ -f "$REQUIREMENTS_STAMP" ]]; then
@@ -202,8 +314,8 @@ prepare_backend() {
 }
 
 prepare_frontend() {
-  echo
-  echo "📦 Preparing frontend dependencies..."
+  CURRENT_PHASE="frontend preparation"
+  step 7 "Preparing the frontend" "Installs the exact npm packages from package-lock.json."
 
   if [[ ! -d "$FRONTEND_DIR/node_modules" ]]; then
     (
@@ -216,53 +328,79 @@ prepare_frontend() {
   fi
 }
 
+# Each service runs in its own process group (setsid), and we record the
+# group id (PGID) in the pid file. "npm run dev" starts child processes;
+# killing only the npm process can leave an orphan holding the port, but
+# killing the whole group stops the entire tree.
 stop_existing_service() {
   local name="$1"
   local pid_file="$2"
 
   if is_process_running_from_pid_file "$pid_file"; then
-    local pid
-    pid="$(cat "$pid_file")"
+    local pgid
+    pgid="$(cat "$pid_file")"
 
-    echo "Stopping existing $name process ($pid)..."
-    kill "$pid" >/dev/null 2>&1 || true
+    echo "Stopping existing $name process group ($pgid)..."
+    kill -- "-$pgid" >/dev/null 2>&1 || kill "$pgid" >/dev/null 2>&1 || true
 
     for _ in {1..20}; do
-      if ! kill -0 "$pid" >/dev/null 2>&1; then
+      if ! kill -0 "$pgid" >/dev/null 2>&1; then
         break
       fi
       sleep 0.5
     done
 
-    if kill -0 "$pid" >/dev/null 2>&1; then
+    if kill -0 "$pgid" >/dev/null 2>&1; then
       print_warning "$name did not stop gracefully; terminating it."
-      kill -9 "$pid" >/dev/null 2>&1 || true
+      kill -9 -- "-$pgid" >/dev/null 2>&1 || kill -9 "$pgid" >/dev/null 2>&1 || true
     fi
   fi
 
   rm -f "$pid_file"
 }
 
+# Run a command detached in its own process group and write the PGID to a file.
+start_detached() {
+  local pid_file="$1"
+  local log_file="$2"
+  shift 2
+
+  if command_exists setsid; then
+    setsid nohup "$@" > "$log_file" 2>&1 &
+  else
+    nohup "$@" > "$log_file" 2>&1 &
+  fi
+  echo $! > "$pid_file"
+}
+
+check_port_free() {
+  local name="$1"
+  local port="$2"
+  if port_in_use "$port"; then
+    print_error "Port $port ($name) is already in use by another program."
+    echo "Stop that program, or choose another port, for example:"
+    echo "  BACKEND_PORT=8001 FRONTEND_PORT=3001 ./scripts/setup.sh"
+    exit 1
+  fi
+}
+
 start_backend() {
-  echo
-  echo "🚀 Starting live FastAPI backend..."
+  CURRENT_PHASE="starting backend"
+  step 8 "Starting the app" "Backend (API) and frontend (dashboard) run on this machine only, at 127.0.0.1."
+  echo "Starting the live FastAPI backend..."
 
   stop_existing_service "backend" "$BACKEND_PID_FILE"
+  check_port_free "backend" "$BACKEND_PORT"
 
+  # Bound to 127.0.0.1 on purpose: this backend has no authentication and
+  # can run kubectl against your cluster, so only this machine may reach it.
   (
     cd "$BACKEND_DIR"
-
     unset DEMO_MODE
-
-    # shellcheck disable=SC1091
-    source ".venv/bin/activate"
-
-    nohup uvicorn app.main:app \
-      --host 0.0.0.0 \
-      --port "$BACKEND_PORT" \
-      > "$BACKEND_LOG" 2>&1 &
-
-    echo $! > "$BACKEND_PID_FILE"
+    start_detached "$BACKEND_PID_FILE" "$BACKEND_LOG" \
+      "$BACKEND_DIR/.venv/bin/uvicorn" app.main:app \
+      --host 127.0.0.1 \
+      --port "$BACKEND_PORT"
   )
 
   sleep 3
@@ -282,20 +420,18 @@ start_backend() {
 }
 
 start_frontend() {
-  echo
-  echo "🚀 Starting Vite frontend..."
+  CURRENT_PHASE="starting frontend"
+  echo "Starting the Vite frontend..."
 
   stop_existing_service "frontend" "$FRONTEND_PID_FILE"
+  check_port_free "frontend" "$FRONTEND_PORT"
 
   (
     cd "$FRONTEND_DIR"
-
-    nohup npm run dev -- \
-      --host 0.0.0.0 \
-      --port "$FRONTEND_PORT" \
-      > "$FRONTEND_LOG" 2>&1 &
-
-    echo $! > "$FRONTEND_PID_FILE"
+    start_detached "$FRONTEND_PID_FILE" "$FRONTEND_LOG" \
+      npm run dev -- \
+      --host 127.0.0.1 \
+      --port "$FRONTEND_PORT"
   )
 
   sleep 3
@@ -312,7 +448,7 @@ start_frontend() {
 print_summary() {
   local frontend_url
   frontend_url="$(
-    grep -Eo 'http://(localhost|127\\.0\\.0\\.1):[0-9]+' "$FRONTEND_LOG" \
+    grep -Eo 'http://(localhost|127\.0\.0\.1):[0-9]+' "$FRONTEND_LOG" \
       | head -n 1 \
       || true
   )"
@@ -326,7 +462,7 @@ print_summary() {
   echo -e "${GREEN}✅ AI Incident Simulator is ready${NC}"
   echo -e "${GREEN}==================================================${NC}"
   echo
-  echo "Mode:     LIVE"
+  echo "Mode:     LIVE (real cluster, real kubectl commands)"
   echo "Cluster:  ${CLUSTER_NAME:-unknown}"
   echo "Region:   ${AWS_REGION:-unknown}"
   echo
@@ -338,12 +474,15 @@ print_summary() {
   echo "  Backend:  $BACKEND_LOG"
   echo "  Frontend: $FRONTEND_LOG"
   echo
-  echo "To stop local services and destroy AWS resources:"
+  echo "Open the Frontend address in your browser."
+  echo "REMINDER: the cluster costs money while it runs."
+  echo "To stop local services and destroy ALL AWS resources:"
   echo "  ./scripts/destroy.sh"
   echo
 }
 
 check_prerequisites
+confirm_account_and_cost
 provision_infrastructure
 wait_for_kubernetes
 prepare_backend
