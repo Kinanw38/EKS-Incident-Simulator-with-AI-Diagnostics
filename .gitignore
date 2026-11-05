@@ -36,6 +36,8 @@ downloads/
 eggs/
 .eggs/
 lib/
+# The shell helpers in scripts/lib are source code, not Python build output.
+!scripts/lib/
 lib64/
 parts/
 sdist/

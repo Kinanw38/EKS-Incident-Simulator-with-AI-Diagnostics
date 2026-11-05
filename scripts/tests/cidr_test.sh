@@ -48,6 +48,7 @@ run_detect() {
   # $1 = value of EKS_ALLOWED_CIDR (may be empty); the rest = addresses the stub returns
   local requested="$1"; shift
   STUB_IPS=("$@")
+  # shellcheck disable=SC2329  # called by detect_allowed_cidr, not directly
   sample_public_ips() { printf '%s\n' "${STUB_IPS[@]}"; }
   CIDR_SOURCE="" ALLOWED_CIDR="" DETECTED_ADDRESSES=""
   EKS_ALLOWED_CIDR="$requested"
