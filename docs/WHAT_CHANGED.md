@@ -159,3 +159,17 @@
 - **מה שונה:** כל manifest (ב-`scenarios.py` ובקבצי `k8s/*.yaml`, כולל ה-Secret של תיקון `crashloop`) קיבל `app.kubernetes.io/part-of: incident-simulator`.
 - **למה:** `destroy.sh` ימחק רק משאבים עם ה-label הזה. קודם הוא מחק `--all --all-namespaces`, כולל `kube-system`.
 - **בראיון:** "השתמשתי ב-label הסטנדרטי של Kubernetes כדי שהניקוי יהיה מדויק ולא יגע במה שלא שלי."
+
+## 19. `destroy.sh`: בטוח, מדויק, ועם בדיקת PASS/FAIL
+
+- **בטיחות:** הסקריפט לא סומך על ה-context הנוכחי של kubectl. הוא קורא את שם הקלאסטר והאזור מ-Terraform, יוצר kubeconfig זמני (`aws eks update-kubeconfig --kubeconfig <tmp>`) ומעביר אותו ל-kubectl במפורש. אם הקלאסטר לא נגיש (למשל ה-IP שלך השתנה), הוא מדלג על ניקוי Kubernetes ולא נוגע בשום דבר אחר.
+- **היקף:** מוחק רק משאבים עם `app.kubernetes.io/part-of=incident-simulator` (סעיף 18), ולא `--all --all-namespaces` כולל `kube-system` כמו קודם. כל Service מסוג `LoadBalancer` נמחק, כי load balancer ב-AWS חוסם מחיקת VPC.
+- **המתנה חכמה:** במקום `sleep 45` עיוור, ממתין רק אם היו LoadBalancers, בבדיקה כל 10 שניות עד 3 דקות.
+- **`terraform destroy`:** עד 3 ניסיונות, 60 שניות בין ניסיון לניסיון (שגיאת `DependencyViolation` ב-VPC היא לרוב זמנית). בכישלון סופי מודפסים אבחונים של network interfaces ושל security groups.
+- **בדיקה אחרי destroy:** רשימת PASS/FAIL: אין משאבים עם התג `Project=AI-Incident-Simulator`, הקלאסטר נעלם, NAT gateways נמחקו, Elastic IP שוחרר, ה-log group נמחק.
+- **ניקוי `~/.kube/config`:** נמחקים רק ה-context, ה-cluster וה-user של הקלאסטר הזה.
+- **עצירת שירותים מקומיים:** קודם process group, ואז בדיקה שהפורטים פנויים. `.venv` ו-`node_modules` אף פעם לא נמחקים.
+- **`--yes`/`-y`:** ללא שאלת אישור. ברירת המחדל נשארת אינטראקטיבית.
+- **פלט:** "Step N/7" עם הסבר קצר לכל שלב, ו-`shellcheck` נקי על שני הסקריפטים.
+- **בראיון:** "הקשחתי את ה-destroy לפי הסיפור 'לא להשאיר כלום ולא להיתקע': מוחק רק מה שלי, מנסה שוב על שגיאות זמניות, ובסוף בודק מול AWS שבאמת לא נשאר כלום."
+- **לא נבדק על AWS אמיתי:** כל הסקריפט. הריצו `destroy.sh` על קלאסטר אמיתי וודאו שרשימת ה-PASS/FAIL נכונה.
