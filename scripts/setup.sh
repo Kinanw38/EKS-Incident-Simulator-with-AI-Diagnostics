@@ -82,16 +82,47 @@ check_prerequisites() {
   require_command kubectl
   require_command python3
   require_command npm
+  require_command curl
   print_success "All required tools are available."
+}
+
+# The EKS API endpoint is public, so we restrict it to the caller's own IP.
+# Override with EKS_ALLOWED_CIDR (for example "203.0.113.7/32").
+detect_allowed_cidr() {
+  if [[ -n "${EKS_ALLOWED_CIDR:-}" ]]; then
+    echo "$EKS_ALLOWED_CIDR"
+    return 0
+  fi
+
+  local ip
+  ip="$(curl --silent --fail --max-time 10 https://checkip.amazonaws.com | tr -d '[:space:]')" || true
+
+  if [[ ! "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+    return 1
+  fi
+
+  echo "${ip}/32"
 }
 
 provision_infrastructure() {
   echo
   echo -e "${BLUE}📦 Provisioning AWS infrastructure with Terraform...${NC}"
+
+  local allowed_cidr
+  if ! allowed_cidr="$(detect_allowed_cidr)"; then
+    print_error "Could not detect your public IP address."
+    echo "The EKS API endpoint must not be left open to the whole internet."
+    echo "Set it yourself and run again, for example:"
+    echo "  EKS_ALLOWED_CIDR=203.0.113.7/32 ./scripts/setup.sh"
+    exit 1
+  fi
+  echo "EKS API endpoint will be reachable only from: $allowed_cidr"
+  echo "(If your IP changes later, run this script again to update it.)"
+
   cd "$TERRAFORM_DIR"
 
   terraform init
-  terraform apply -auto-approve
+  terraform apply -auto-approve -var "public_access_cidrs=[\"${allowed_cidr}\"]"
 
   CLUSTER_NAME="$(terraform output -raw cluster_name)"
   AWS_REGION="$(terraform output -raw cluster_region)"

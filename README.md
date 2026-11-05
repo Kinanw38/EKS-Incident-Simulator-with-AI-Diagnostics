@@ -76,11 +76,11 @@ A workload exceeds its configured memory limit.
 
 The simulator demonstrates how Kubernetes terminates the container when the process exceeds its cgroup memory boundary.
 
-### CrashLoopBackOff
+### Missing Secret (`crashloop`)
 
 A workload depends on a Kubernetes Secret that does not exist.
 
-The container fails during startup and repeatedly restarts until the missing configuration is restored.
+Kubernetes cannot even create the container, so the pod stays in `CreateContainerConfigError` (there are no application logs, only events) until the Secret exists. The scenario id stays `crashloop` for API compatibility.
 
 ### Broken Service Routing
 
@@ -188,7 +188,7 @@ Provides high-level cluster visibility, displaying node health, workload availab
 ---
 
 ### 🧪 Incident Simulation Lab
-Allows engineers to trigger controlled failure scenarios (OOMKilled, CrashLoopBackOff, Broken Routing) to simulate real-world SRE incidents.
+Allows engineers to trigger controlled failure scenarios (OOMKilled, missing Secret, Broken Routing) to simulate real-world SRE incidents.
 
 <p align="center">
   <img src="assets/screenshots/incident-lab.png" alt="Incident Lab" width="100%" />
@@ -321,6 +321,7 @@ chmod +x scripts/setup.sh scripts/destroy.sh
 The setup script automatically:
 
 - Checks the required tools.
+- Restricts the public EKS API endpoint to your current public IP (override with `EKS_ALLOWED_CIDR=203.0.113.7/32`; if your IP changes, run the script again).
 - Runs Terraform.
 - Creates or updates the EKS infrastructure.
 - Updates the local kubeconfig.
@@ -392,6 +393,35 @@ frontend/node_modules
 Those are local development dependencies and are preserved for the next setup.
 
 Always destroy unused AWS infrastructure to avoid unnecessary cloud charges.
+
+---
+
+## Tests and CI
+
+Backend tests run in Demo Mode, with no AWS account and no cluster:
+
+```bash
+cd backend
+pip install -r requirements-dev.txt
+python -m pytest
+```
+
+The GitHub Actions pipeline runs on every push and pull request:
+
+- Terraform `fmt` and `validate`.
+- Python lint and the pytest suite.
+- Frontend production build.
+- Docker image build, and a check that the container does not run as root.
+- CodeQL security analysis (Python and JavaScript), also weekly.
+- Dependabot keeps pip, npm, Docker, Terraform and GitHub Actions dependencies up to date.
+
+---
+
+## Design Decisions
+
+- **Terraform state is local on purpose.** This is a single-user, short-lived simulator. A remote backend (S3 and a lock table) would add resources that can outlive `terraform destroy`. Keep `terraform/terraform.tfstate` until the destroy finishes: deleting it leaves the AWS resources orphaned. For a team or a long-lived environment, use a remote backend with locking.
+- **The EKS API endpoint is public but restricted** to your IP by `scripts/setup.sh`. A production cluster would normally use a private endpoint reached through a VPN or bastion.
+- **Not included on purpose:** KMS envelope encryption for Kubernetes Secrets (it leaves a key pending deletion after destroy) and a remote Terraform backend. Both are standard in production and would be the next hardening steps.
 
 ---
 

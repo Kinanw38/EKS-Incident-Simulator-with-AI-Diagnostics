@@ -6,6 +6,15 @@ on:
   pull_request:
     branches: [ main, master ]
 
+# Least privilege: jobs can only read the repository unless they ask for more.
+permissions:
+  contents: read
+
+# A newer push to the same branch cancels the older, now-useless run.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   terraform-checks:
     name: "Terraform Lint & Validate"
@@ -34,7 +43,7 @@ jobs:
           terraform validate
 
   backend-checks:
-    name: "Python FastAPI Linting"
+    name: "Python Lint & Tests"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -44,21 +53,48 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
 
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install flake8
-          if [ -f backend/requirements.txt ]; then pip install -r backend/requirements.txt; fi
+          pip install -r backend/requirements-dev.txt
 
       - name: Lint with Flake8
         run: |
           # Stop build if there are Python syntax errors or undefined names
-          flake8 backend/app --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 backend --count --select=E9,F63,F7,F82 --show-source --statistics
+
+      - name: Run Tests
+        run: |
+          cd backend
+          python -m pytest -q
+
+  frontend-build:
+    name: "Frontend Build"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install & Build
+        run: |
+          cd frontend
+          npm ci
+          npm run build
 
   docker-build:
     name: "Docker Build Verification"
-    needs: [terraform-checks, backend-checks]
+    needs: [terraform-checks, backend-checks, frontend-build]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -73,4 +109,11 @@ jobs:
           context: ./backend
           file: ./backend/Dockerfile
           push: false
+          load: true
           tags: ai-incident-backend:test
+
+      - name: Verify the container does not run as root
+        run: |
+          uid="$(docker run --rm --entrypoint id ai-incident-backend:test -u)"
+          echo "Container user id: $uid"
+          test "$uid" != "0"

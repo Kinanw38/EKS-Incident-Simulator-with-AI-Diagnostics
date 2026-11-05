@@ -45,3 +45,14 @@ variable "min_capacity" {
   type        = number
   default     = 1
 }
+
+variable "public_access_cidrs" {
+  description = "CIDR blocks allowed to reach the public EKS API endpoint. scripts/setup.sh sets this to your current public IP. The default (open to the whole internet) is only a fallback."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+
+  validation {
+    condition     = alltrue([for cidr in var.public_access_cidrs : can(cidrhost(cidr, 0))])
+    error_message = "Every entry must be a valid CIDR block, for example 203.0.113.7/32."
+  }
+}

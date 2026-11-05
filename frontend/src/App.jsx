@@ -396,6 +396,20 @@ export default function App() {
         );
       }
 
+      if (data.status !== "RESOLVED") {
+        // The fix was applied but the workload is not ready yet:
+        // keep the incident open instead of claiming success.
+        addToast(
+          "warning",
+          "Fix Applied, Not Ready Yet",
+          data.message ||
+            "The workload is not ready yet. Check the pods again shortly."
+        );
+
+        await fetchClusterHealth();
+        return;
+      }
+
       setRemediationSuccess(true);
       setResolvedIncidentTitle(incidentTitle);
       setSelectedScenario(null);

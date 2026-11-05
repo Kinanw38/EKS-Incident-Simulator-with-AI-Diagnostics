@@ -2,7 +2,6 @@
 # Terraform & AWS Secrets
 # ==========================================
 **/terraform/.terraform/
-**/terraform/.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
 *.tfvars
