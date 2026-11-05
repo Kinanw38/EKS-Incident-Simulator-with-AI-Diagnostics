@@ -17,38 +17,40 @@
   ------------
   The components use Tailwind's zinc scale (bg-zinc-950, text-zinc-400, ...).
   Instead of rewriting every class for light mode, the zinc scale itself is
-  redefined here, once per theme. Dark = softer blue-gray (less pure black),
-  light = the same scale inverted. The rest of the app does not need to know.
+  redefined here, once per theme. Dark = warm graphite (less pure black),
+  light = warm paper, the same scale inverted. The rest of the app does not need to know.
   The theme is chosen by the data-theme attribute on <html> (see App.jsx).
 */
 :root {
   color-scheme: dark;
-  --color-zinc-50: #f4f6fa;
-  --color-zinc-100: #e8ebf1;
-  --color-zinc-200: #d3d8e1;
-  --color-zinc-300: #b4bbc8;
-  --color-zinc-400: #939bab;
-  --color-zinc-500: #7a8394;
-  --color-zinc-600: #5b6372;
-  --color-zinc-700: #3b4250;
-  --color-zinc-800: #2a303c;
-  --color-zinc-900: #212630;
-  --color-zinc-950: #181c24;
+  /* Warm graphite instead of cold blue-black. */
+  --color-zinc-50: #f5f4f1;
+  --color-zinc-100: #e9e7e2;
+  --color-zinc-200: #d4d1ca;
+  --color-zinc-300: #b6b2a9;
+  --color-zinc-400: #99958d;
+  --color-zinc-500: #7e7a73;
+  --color-zinc-600: #5f5c56;
+  --color-zinc-700: #403d39;
+  --color-zinc-800: #2e2c29;
+  --color-zinc-900: #252422;
+  --color-zinc-950: #1b1a18;
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --color-zinc-50: #0f172a;
-  --color-zinc-100: #162033;
-  --color-zinc-200: #1f2a3d;
-  --color-zinc-300: #334155;
-  --color-zinc-400: #475569;
-  --color-zinc-500: #5f6b7d;
-  --color-zinc-600: #7a8496;
-  --color-zinc-700: #cbd2dc;
-  --color-zinc-800: #dde2ea;
-  --color-zinc-900: #e9edf3;
-  --color-zinc-950: #f3f5f9;
+  /* Warm paper tones. */
+  --color-zinc-50: #1c1917;
+  --color-zinc-100: #292524;
+  --color-zinc-200: #38332f;
+  --color-zinc-300: #4a4540;
+  --color-zinc-400: #5f5953;
+  --color-zinc-500: #6f6963;
+  --color-zinc-600: #8b857d;
+  --color-zinc-700: #d6d2cb;
+  --color-zinc-800: #e3dfd8;
+  --color-zinc-900: #eeebe5;
+  --color-zinc-950: #f8f6f2;
 
   /* Pale accent text is unreadable on a light background: use darker shades. */
   --color-emerald-300: #047857;

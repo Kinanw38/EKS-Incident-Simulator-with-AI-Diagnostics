@@ -3,7 +3,8 @@ import {
   Activity,
   AlertOctagon,
   ArrowRight,
-  BrainCircuit,
+  Radar,
+  ScanSearch,
   Box,
   Check,
   Cpu,
@@ -73,8 +74,8 @@ function getModeClasses(clusterHealth) {
       badge:
         "border-emerald-500/20 bg-emerald-500/10 text-emerald-400",
       dot: "bg-emerald-400",
-      border: "border-emerald-500/30",
-      background: "bg-emerald-500/4",
+      border: "border-l-emerald-500",
+      background: "bg-zinc-900/40",
       title: "text-emerald-300"
     };
   }
@@ -83,8 +84,8 @@ function getModeClasses(clusterHealth) {
     return {
       badge: "border-blue-500/20 bg-blue-500/10 text-blue-400",
       dot: "bg-blue-400",
-      border: "border-blue-500/30",
-      background: "bg-blue-500/4",
+      border: "border-l-blue-500",
+      background: "bg-zinc-900/40",
       title: "text-blue-300"
     };
   }
@@ -92,8 +93,8 @@ function getModeClasses(clusterHealth) {
   return {
     badge: "border-rose-500/20 bg-rose-500/10 text-rose-400",
     dot: "bg-rose-400",
-    border: "border-rose-500/30",
-    background: "bg-rose-500/4",
+    border: "border-l-rose-500",
+    background: "bg-zinc-900/40",
     title: "text-rose-300"
   };
 }
@@ -620,7 +621,7 @@ export default function App() {
       id: "ai",
       label: "AI RCA & Patching",
       short: "AI RCA",
-      icon: BrainCircuit
+      icon: ScanSearch
     },
     {
       id: "terminal",
@@ -641,7 +642,7 @@ export default function App() {
         <div>
           <div className="flex items-center gap-3 border-b border-zinc-800/80 p-5">
             <div className="shrink-0 rounded-lg border border-blue-500/20 bg-blue-600/10 p-2 text-blue-400">
-              <BrainCircuit className="h-5 w-5" />
+              <Radar className="h-5 w-5" />
             </div>
 
             <div className="min-w-0">
@@ -693,7 +694,7 @@ export default function App() {
             </span>
 
             <span
-              className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[11px] ${modeClasses.badge}`}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-medium text-[11px] ${modeClasses.badge}`}
             >
               <span
                 className={`h-1.5 w-1.5 rounded-full ${modeClasses.dot}`}
@@ -717,13 +718,13 @@ export default function App() {
         <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-3 border-b border-zinc-800/80 bg-zinc-950/90 px-4 backdrop-blur-sm sm:px-6">
           <div className="flex min-w-0 items-center gap-2 md:hidden">
             <div className="shrink-0 rounded-md border border-blue-500/20 bg-blue-600/10 p-1.5 text-blue-400">
-              <BrainCircuit className="h-4 w-4" />
+              <Radar className="h-4 w-4" />
             </div>
 
             <span className="truncate text-sm font-bold">EKS RCA</span>
 
             <span
-              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[10px] ${modeClasses.badge}`}
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 font-medium text-[10px] ${modeClasses.badge}`}
             >
               <span className={`h-1.5 w-1.5 rounded-full ${modeClasses.dot}`} />
               {modeLabel}
@@ -937,7 +938,7 @@ function OverviewTab({
           </h2>
 
           <span
-            className={`rounded-full border px-2.5 py-1 font-mono text-[10px] ${modeClasses.badge}`}
+            className={`rounded-full border px-2.5 py-1 font-medium text-[10px] ${modeClasses.badge}`}
           >
             {modeLabel} ENVIRONMENT
           </span>
@@ -949,7 +950,7 @@ function OverviewTab({
       </div>
 
       <div
-        className={`rounded-xl border p-5 ${modeClasses.border} ${modeClasses.background}`}
+        className={`rounded-xl border border-l-4 border-zinc-800 p-5 ${modeClasses.border} ${modeClasses.background}`}
       >
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div className="flex items-start gap-4">
@@ -1063,11 +1064,11 @@ function OverviewTab({
                   {selectedScenario.title}
                 </span>
 
-                <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 font-mono text-[10px] text-amber-400">
+                <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 font-medium text-[10px] text-amber-400">
                   ACTIVE
                 </span>
 
-                <span className="rounded-full border border-rose-500/20 bg-rose-500/10 px-2 py-0.5 font-mono text-[10px] text-rose-400">
+                <span className="rounded-full border border-rose-500/20 bg-rose-500/10 px-2 py-0.5 font-medium text-[10px] text-rose-400">
                   FAULT INJECTED
                 </span>
               </div>
@@ -1080,7 +1081,7 @@ function OverviewTab({
             <button
               type="button"
               onClick={onOpenAi}
-              className="flex shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white transition hover:bg-blue-500"
+              className="flex shrink-0 items-center gap-2 rounded-lg bg-zinc-100 px-4 py-2 text-xs font-medium text-zinc-950 transition hover:bg-zinc-200"
             >
               Inspect RCA
               <ArrowRight className="h-3.5 w-3.5" />
@@ -1116,7 +1117,7 @@ function OverviewTab({
                     className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 px-3 py-2 text-[11px] font-medium text-zinc-300 transition hover:bg-zinc-800"
                   >
                     Run Health Analysis
-                    <BrainCircuit className="h-3.5 w-3.5" />
+                    <ScanSearch className="h-3.5 w-3.5" />
                   </button>
                 </div>
               </div>
@@ -1217,7 +1218,7 @@ function LabTab({
                   onClick={() => onRunScenario(scenario)}
                   className={`flex w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-semibold transition ${
                     active
-                      ? "bg-blue-600 text-white"
+                      ? "bg-zinc-100 text-zinc-950"
                       : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
                   }`}
                 >
@@ -1276,12 +1277,12 @@ function AiTab({
           type="button"
           onClick={onRunAnalysis}
           disabled={rcaLoading}
-          className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex items-center justify-center gap-2 rounded-lg bg-zinc-100 px-4 py-2 text-xs font-semibold text-zinc-950 transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {rcaLoading ? (
             <RefreshCw className="h-3.5 w-3.5 animate-spin" />
           ) : (
-            <BrainCircuit className="h-3.5 w-3.5" />
+            <ScanSearch className="h-3.5 w-3.5" />
           )}
 
           {rcaLoading
@@ -1462,7 +1463,7 @@ function TerminalTab({
         <button
           type="submit"
           disabled={terminalLoading}
-          className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-xs font-semibold text-white transition hover:bg-blue-500 disabled:opacity-60"
+          className="flex items-center justify-center gap-2 rounded-lg bg-zinc-100 px-5 py-2.5 text-xs font-semibold text-zinc-950 transition hover:bg-zinc-200 disabled:opacity-60"
         >
           {terminalLoading && (
             <RefreshCw className="h-3.5 w-3.5 animate-spin" />
@@ -1558,7 +1559,7 @@ function MetricsPanel({ metrics }) {
         </div>
 
         {simulated && (
-          <span className="rounded-full border border-blue-500/20 bg-blue-500/10 px-2.5 py-1 font-mono text-[10px] text-blue-400">
+          <span className="rounded-full border border-blue-500/20 bg-blue-500/10 px-2.5 py-1 font-medium text-[10px] text-blue-400">
             SIMULATED
           </span>
         )}
@@ -1762,7 +1763,7 @@ function YamlPanel({
 function EmptyState({ message }) {
   return (
     <div className="animate-content-in rounded-xl border border-dashed border-zinc-800 p-12 text-center">
-      <BrainCircuit className="mx-auto mb-3 h-8 w-8 text-zinc-600" />
+      <ScanSearch className="mx-auto mb-3 h-8 w-8 text-zinc-600" />
 
       <p className="mx-auto max-w-xl text-xs leading-relaxed text-zinc-400">
         {message}
