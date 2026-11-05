@@ -1,4 +1,4 @@
-# metrics-server v0.9.0, copied unchanged from the official release:
+# metrics-server v0.9.0, from the official release (one local change: a memory limit, see "LOCAL CHANGE"):
 # https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.9.0/components.yaml
 # It lets Kubernetes report real CPU/memory usage (used by the dashboard in Live Mode).
 # scripts/setup.sh applies it. It runs as one small pod in kube-system and creates
@@ -166,6 +166,11 @@ spec:
           initialDelaySeconds: 20
           periodSeconds: 10
         resources:
+          # LOCAL CHANGE: the official manifest has no limits. A memory limit
+          # stops this container from using all the memory of a node. Normal
+          # use on a 2-node cluster is well below 100Mi.
+          limits:
+            memory: 300Mi
           requests:
             cpu: 100m
             memory: 200Mi

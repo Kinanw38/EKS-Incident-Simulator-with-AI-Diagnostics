@@ -66,42 +66,75 @@ def _parse_memory_gib(value) -> float:
 
 
 # Simulated dashboard numbers for demo mode, per active incident.
+# The baseline matches what a fresh 2-node EKS cluster really shows with
+# metrics-server (about 3-4% CPU and 15% memory, 7 system pods: aws-node x2,
+# kube-proxy x2, coredns x2, metrics-server x1), so the demo and Live Mode
+# look alike. "unhealthy" = Pending, Failed, or Running but not Ready (an
+# OOMKilled or crash-looping pod is still in phase Running while Kubernetes
+# keeps restarting it). "reserved" = (cpu %, memory %) of pod requests.
+# Honest detail: a small 64Mi pod does not move a whole node's memory, so the
+# OOMKilled incident shows up as restarts, not as a memory spike. The
+# memory_leak and cpu_saturation incidents are the ones that move the gauges.
+def _pods(total, running, pending, unhealthy, restarts):
+    return {
+        "total": total,
+        "running": running,
+        "pending": pending,
+        "failed": 0,
+        "unhealthy": unhealthy,
+        "restarts": restarts,
+    }
+
+
 DEMO_METRIC_PROFILES = {
-    # Baseline of a fresh 2-node EKS cluster: aws-node x2, kube-proxy x2,
-    # coredns x2 and metrics-server x1 = 7 system pods. An incident adds the
-    # one workload pod of that scenario. "unhealthy" = Pending, Failed, or
-    # Running but not Ready (an OOMKilled or crash-looping pod is still in
-    # phase Running while Kubernetes keeps restarting it).
     None: {
-        "cpu": 24,
-        "memory": 41,
-        "reserved": (19, 22),
-        "pods": {"total": 7, "running": 7, "pending": 0, "failed": 0, "unhealthy": 0, "restarts": 0},
+        "cpu": 4,
+        "memory": 15,
+        "reserved": (15.5, 7),
+        "pods": _pods(7, 7, 0, 0, 0),
         "warnings": [],
     },
     "oomkilled": {
-        "cpu": 41,
-        "memory": 62,
-        "reserved": (20, 23),
-        "pods": {"total": 8, "running": 8, "pending": 0, "failed": 0, "unhealthy": 1, "restarts": 4},
+        "cpu": 4,
+        "memory": 15.5,
+        "reserved": (15.7, 7.5),
+        "pods": _pods(8, 8, 0, 1, 4),
         "warnings": ["api-service is being OOMKilled (memory limit exceeded)."],
     },
     "crashloop": {
-        "cpu": 25,
-        "memory": 42,
-        "reserved": (20, 23),
-        "pods": {"total": 8, "running": 7, "pending": 1, "failed": 0, "unhealthy": 1, "restarts": 0},
+        "cpu": 4,
+        "memory": 15,
+        "reserved": (15.7, 7.5),
+        "pods": _pods(8, 7, 1, 1, 0),
         "warnings": [
             "auth-service is stuck in CreateContainerConfigError (missing Secret)."
         ],
     },
     "broken_routing": {
-        "cpu": 26,
-        "memory": 42,
-        "reserved": (20, 23),
-        "pods": {"total": 8, "running": 8, "pending": 0, "failed": 0, "unhealthy": 0, "restarts": 0},
+        "cpu": 4,
+        "memory": 15,
+        "reserved": (15.7, 7.5),
+        "pods": _pods(8, 8, 0, 0, 0),
         "warnings": [
             "payment-service has no ready endpoints (selector matches no pod)."
+        ],
+    },
+    "memory_leak": {
+        "cpu": 6,
+        "memory": 30,
+        "reserved": (16, 15),
+        "pods": _pods(9, 9, 0, 2, 8),
+        "warnings": [
+            "cache-service pods keep hitting their 512Mi limit and are OOMKilled (memory leak)."
+        ],
+    },
+    "cpu_saturation": {
+        "cpu": 42,
+        "memory": 15.5,
+        "reserved": (20.5, 7.5),
+        "pods": _pods(9, 9, 0, 0, 0),
+        "warnings": [
+            "report-worker pods are running at their CPU limit and are being throttled."
         ],
     },
 }
@@ -259,8 +292,12 @@ class KubernetesManager:
                 "pods": dict(profile["pods"]),
                 "capacity": {"cpu_cores": 3.86, "memory_gib": 6.4},
                 "usage": {
-                    "cpu_percent": _demo_wobble(profile["cpu"], now, 1, 9),
-                    "memory_percent": _demo_wobble(profile["memory"], now, 2, 5),
+                    "cpu_percent": _demo_wobble(
+                        profile["cpu"], now, 1, 0.12 * profile["cpu"] + 0.8
+                    ),
+                    "memory_percent": _demo_wobble(
+                        profile["memory"], now, 2, 0.05 * profile["memory"] + 0.4
+                    ),
                 },
                 "reserved": {
                     "cpu_percent": profile["reserved"][0],

@@ -10,6 +10,8 @@ NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck source=lib/cidr.sh
+source "$SCRIPT_DIR/lib/cidr.sh"
 TERRAFORM_DIR="$PROJECT_ROOT/terraform"
 BACKEND_DIR="$PROJECT_ROOT/backend"
 FRONTEND_DIR="$PROJECT_ROOT/frontend"
@@ -192,24 +194,6 @@ port_in_use() {
   (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null
 }
 
-# The EKS API endpoint is public, so we restrict it to the caller's own IP.
-# Override with EKS_ALLOWED_CIDR (for example "203.0.113.7/32").
-detect_allowed_cidr() {
-  if [[ -n "${EKS_ALLOWED_CIDR:-}" ]]; then
-    echo "$EKS_ALLOWED_CIDR"
-    return 0
-  fi
-
-  local ip
-  ip="$(curl --silent --fail --max-time 10 https://checkip.amazonaws.com | tr -d '[:space:]')" || true
-
-  if [[ ! "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
-    return 1
-  fi
-
-  echo "${ip}/32"
-}
-
 # Older runs let EKS create the CloudWatch log group by itself, so it can
 # survive "terraform destroy". If it exists in AWS but Terraform does not
 # know it, "terraform apply" would fail with "already exists". Importing
@@ -217,7 +201,8 @@ detect_allowed_cidr() {
 import_existing_log_group() {
   local allowed_cidr="$1"
   local cluster_name log_group address
-  cluster_name="$(echo 'var.cluster_name' | terraform console | tr -d '"[:space:]')"
+  cluster_name="$(echo 'var.cluster_name' | terraform console \
+    -var "public_access_cidrs=[\"${allowed_cidr}\"]" | tr -d '"[:space:]')"
   log_group="/aws/eks/${cluster_name}/cluster"
   address="aws_cloudwatch_log_group.cluster"
 
@@ -240,16 +225,37 @@ import_existing_log_group() {
 provision_infrastructure() {
   step 3 "Building the AWS infrastructure" "Terraform creates the network, the EKS cluster and the worker nodes. This usually takes 10-15 minutes, please wait."
 
-  local allowed_cidr
-  if ! allowed_cidr="$(detect_allowed_cidr)"; then
+  local status=0
+  detect_allowed_cidr || status=$?
+  if (( status == 1 )); then
     print_error "Could not detect your public IP address."
     echo "The EKS API endpoint must not be left open to the whole internet."
-    echo "Set it yourself and run again, for example:"
+    echo "Set the allowed range yourself and run again, for example:"
     echo "  EKS_ALLOWED_CIDR=203.0.113.7/32 ./scripts/setup.sh"
     exit 1
   fi
-  echo "EKS API endpoint will be reachable only from: $allowed_cidr"
-  echo "(If your IP changes later, run this script again to update it.)"
+  if (( status == 2 )); then
+    print_error "Your public addresses are too far apart to allow safely: ${DETECTED_ADDRESSES}"
+    echo "They would need a range broader than /16. Choose the range yourself, for example:"
+    echo "  EKS_ALLOWED_CIDR=203.0.113.0/24 ./scripts/setup.sh"
+    exit 1
+  fi
+
+  local allowed_cidr="$ALLOWED_CIDR"
+  case "$CIDR_SOURCE" in
+    auto)
+      echo "Public address(es) seen: ${DETECTED_ADDRESSES}"
+      echo "EKS API endpoint will be reachable only from: $ALLOWED_CIDR"
+      echo "(Set EKS_ALLOWED_CIDR to choose another range.)"
+      ;;
+    manual)
+      echo "EKS API endpoint will be reachable only from: $ALLOWED_CIDR (from EKS_ALLOWED_CIDR)"
+      ;;
+    open)
+      print_warning "EKS API endpoint is OPEN to the whole internet (EKS_ALLOWED_CIDR=open)."
+      echo "AWS credentials are still required to use it, but this is not recommended."
+      ;;
+  esac
 
   cd "$TERRAFORM_DIR"
 
@@ -283,7 +289,72 @@ provision_infrastructure() {
   aws eks update-kubeconfig --region "$AWS_REGION" --name "$CLUSTER_NAME"
 }
 
+# A new cluster's API endpoint can take a few minutes to answer. If it never
+# does, the most common reason is that kubectl leaves the internet from an
+# address that is not in the allowed range, and the timeout looks like
+# "dial tcp ...: i/o timeout". Say so, and offer a wider range.
+api_reachable() {
+  kubectl get --raw /readyz --request-timeout=15s >/dev/null 2>&1
+}
+
+wait_for_api() {
+  local attempt
+  for attempt in $(seq 1 12); do
+    if api_reachable; then
+      return 0
+    fi
+    echo "  The Kubernetes API is not answering yet (attempt ${attempt}/12)..."
+    sleep 15
+  done
+  return 1
+}
+
+ensure_api_reachable() {
+  CURRENT_PHASE="connecting to the Kubernetes API"
+
+  if wait_for_api; then
+    print_success "The Kubernetes API is reachable."
+    return 0
+  fi
+
+  print_error "kubectl cannot reach the Kubernetes API."
+  echo "The cluster exists, but this computer cannot connect to it. The most common"
+  echo "reason is that your connection leaves the internet from an address outside"
+  echo "the allowed range (${ALLOWED_CIDR}), for example with a VPN, a hotspot, or a"
+  echo "provider that rotates addresses."
+
+  if [[ "$CIDR_SOURCE" == "auto" && "$ASSUME_YES" != "true" ]]; then
+    local first widened
+    first="${DETECTED_ADDRESSES%% *}"
+    widened="$(int_to_ip $(( $(ip_to_int "$first") & 0xFFFF0000 )))/16"
+    echo
+    echo "Option: allow your whole /16 network (${widened}) and try again."
+    echo "This lets other customers of the same provider reach the API endpoint;"
+    echo "they still need valid AWS credentials."
+    if ask_yes_no "Widen the allowed range to ${widened}?"; then
+      CURRENT_PHASE="terraform apply (wider range)"
+      (cd "$TERRAFORM_DIR" && terraform apply -auto-approve \
+        -var "public_access_cidrs=[\"${widened}\"]")
+      ALLOWED_CIDR="$widened"
+      CURRENT_PHASE="connecting to the Kubernetes API"
+      if wait_for_api; then
+        print_success "The Kubernetes API is reachable."
+        return 0
+      fi
+    fi
+  fi
+
+  echo
+  echo "To choose the range yourself, for example:"
+  echo "  EKS_ALLOWED_CIDR=203.0.113.0/24 ./scripts/setup.sh"
+  echo "The cluster is running and costs money. Fix this and run the script again,"
+  echo "or run ./scripts/destroy.sh to remove everything."
+  exit 1
+}
+
 wait_for_kubernetes() {
+  ensure_api_reachable
+
   CURRENT_PHASE="waiting for Kubernetes nodes"
   step 5 "Waiting for the worker nodes" "The cluster is only usable when every node reports Ready (waits up to 5 minutes)."
   kubectl wait --for=condition=Ready nodes --all --timeout=300s

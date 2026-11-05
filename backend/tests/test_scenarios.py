@@ -15,8 +15,46 @@ REQUIRED_KEYS = {
 }
 
 
-def test_three_scenarios_exist():
-    assert set(SCENARIOS) == {"oomkilled", "crashloop", "broken_routing"}
+def test_expected_scenarios_exist():
+    assert set(SCENARIOS) == {
+        "oomkilled",
+        "crashloop",
+        "broken_routing",
+        "memory_leak",
+        "cpu_saturation",
+    }
+
+
+def test_resource_incidents_are_bounded_by_limits():
+    """A demo incident must not be able to exhaust a small cluster."""
+    for key in ("memory_leak", "cpu_saturation"):
+        for field in ("problem_yaml", "fix_yaml"):
+            deployment = next(
+                doc
+                for doc in yaml.safe_load_all(SCENARIOS[key][field])
+                if doc and doc.get("kind") == "Deployment"
+            )
+            assert deployment["spec"]["replicas"] <= 2, (key, field)
+            for container in deployment["spec"]["template"]["spec"]["containers"]:
+                limits = container["resources"]["limits"]
+                assert "memory" in limits, (key, field)
+                if key == "cpu_saturation":
+                    assert "cpu" in limits, (key, field)
+
+
+def test_k8s_folder_matches_the_scenarios():
+    """k8s/*/ is a copy of each scenario's YAML, so they must not drift."""
+    import pathlib
+
+    root = pathlib.Path(__file__).resolve().parents[2] / "k8s"
+    folders = {
+        "memory_leak": "04-memory-leak",
+        "cpu_saturation": "05-cpu-saturation",
+    }
+    for key, folder in folders.items():
+        for kind in ("problem", "fix"):
+            on_disk = (root / folder / f"{kind}.yaml").read_text()
+            assert on_disk == SCENARIOS[key][f"{kind}_yaml"], (key, kind)
 
 
 def test_scenarios_have_required_keys_and_matching_ids():

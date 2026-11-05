@@ -79,6 +79,16 @@ def analyze_incident_telemetry(incident_id: str, logs: str, events: str) -> dict
             "root_cause": "Service label selector mismatch ('app: wrong-label-selector' vs Pod label 'app: payment-processor').",
             "impact": "ClusterIP Service has 0 active endpoints; incoming traffic is dropped.",
             "recommended_fix": "Update Service spec.selector.app to match Deployment pod template label 'payment-processor'."
+        },
+        "memory_leak": {
+            "root_cause": "The cache-service container keeps allocating memory (~700Mi) while its limit is 512Mi, so the kernel OOM killer terminates it each time it reaches the limit (exit code 137).",
+            "impact": "Both replicas restart in a loop, cluster memory usage climbs and drops, and cache requests fail while the pods restart.",
+            "recommended_fix": "Fix the leak so the working set stays well below the limit (here: ~200Mi), and keep a memory limit as a safety net."
+        },
+        "cpu_saturation": {
+            "root_cause": "The report-worker pods run a CPU busy loop (no useful work), so each replica consumes its entire CPU limit (800m).",
+            "impact": "Cluster CPU usage climbs, the pods are CPU-throttled, and other workloads on the same nodes compete for CPU.",
+            "recommended_fix": "Right-size the workload: reduce replicas to 1 and lower the CPU limit to 200m (requests stay at 100m)."
         }
     }
 

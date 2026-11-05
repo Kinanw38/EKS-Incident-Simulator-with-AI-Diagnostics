@@ -32,11 +32,16 @@ def test_list_and_get_scenarios(client):
         "oomkilled",
         "crashloop",
         "broken_routing",
+        "memory_leak",
+        "cpu_saturation",
     }
     assert client.get("/api/scenarios/oomkilled").status_code == 200
 
 
-@pytest.mark.parametrize("incident_id", ["oomkilled", "crashloop", "broken_routing"])
+@pytest.mark.parametrize(
+    "incident_id",
+    ["oomkilled", "crashloop", "broken_routing", "memory_leak", "cpu_saturation"],
+)
 def test_trigger_rca_and_remediate(client, incident_id):
     trigger = client.post(f"/api/scenarios/{incident_id}/trigger")
     assert trigger.status_code == 200
@@ -98,15 +103,24 @@ def test_demo_metrics_follow_the_active_incident(client):
     oom = client.get("/api/metrics?incident=oomkilled").json()
     secret = client.get("/api/metrics?incident=crashloop").json()
     routing = client.get("/api/metrics?incident=broken_routing").json()
+    leak = client.get("/api/metrics?incident=memory_leak").json()
+    cpu = client.get("/api/metrics?incident=cpu_saturation").json()
 
+    # Baseline like a fresh 2-node EKS cluster.
     assert healthy["warnings"] == []
+    assert healthy["pods"]["total"] == 7
     assert healthy["pods"]["unhealthy"] == 0 and healthy["pods"]["restarts"] == 0
+    assert healthy["usage"]["cpu_percent"] < 10
 
-    assert oom["usage"]["memory_percent"] > healthy["usage"]["memory_percent"] + 10
+    # A small pod shows up as restarts, not as a node-wide memory spike.
     assert oom["pods"]["unhealthy"] == 1 and oom["pods"]["restarts"] > 0
-
     assert secret["pods"]["pending"] == 1 and secret["warnings"]
-    assert routing["warnings"] and routing["pods"]["failed"] == 0
+    assert routing["warnings"] and routing["pods"]["unhealthy"] == 0
+
+    # The two resource incidents are the ones that move the gauges.
+    assert leak["usage"]["memory_percent"] > healthy["usage"]["memory_percent"] + 10
+    assert leak["pods"]["unhealthy"] == 2 and leak["pods"]["restarts"] > 0
+    assert cpu["usage"]["cpu_percent"] > healthy["usage"]["cpu_percent"] + 25
 
 
 def test_unknown_incident_is_ignored(client):
