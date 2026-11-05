@@ -179,7 +179,7 @@ OFFLINE
 ## 📸 Screenshots
 
 ### 📊 Dashboard Overview
-Provides high-level cluster visibility: node health, pod counts, restarts, capacity, and CPU/memory gauges. In Demo Mode the gauges are clearly labelled as simulated and follow the active incident (for example memory climbs and restarts appear during an OOMKilled incident, and return to normal after remediation); in Live Mode only values the Kubernetes API really provides are shown (live CPU/memory usage would need metrics-server, which is not installed). A light/dark theme toggle is in the top bar.
+Provides high-level cluster visibility: node health, pod counts, restarts, capacity, and CPU/memory gauges. In Demo Mode the gauges are clearly labelled as simulated and follow the active incident (for example memory climbs and restarts appear during an OOMKilled incident, and return to normal after remediation); in Live Mode only values the Kubernetes API really provides are shown (live CPU/memory usage would need metrics-server, which is not installed, so Live Mode shows what pods have reserved through their resource requests compared with the nodes' allocatable capacity instead). A light/dark theme toggle is in the top bar.
 
 <p align="center">
   <img src="assets/screenshots/dashboard-overview.png" alt="Dashboard Overview" width="100%" />

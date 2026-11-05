@@ -1492,12 +1492,6 @@ function UsageBar({ label, icon: Icon, percent, simulated }) {
           style={{ width: known ? `${Math.min(percent, 100)}%` : "0%" }}
         />
       </div>
-
-      {!known && (
-        <p className="text-[10px] text-zinc-500">
-          Live usage needs metrics-server, which this project does not install.
-        </p>
-      )}
     </div>
   );
 }
@@ -1510,6 +1504,12 @@ function MetricsPanel({ metrics }) {
 
   const { nodes, pods, capacity, usage, simulated } = metrics;
   const warnings = metrics.warnings || [];
+  const reserved = metrics.reserved;
+  // Live clusters have no CPU/memory usage unless metrics-server is installed.
+  // Then the two empty "n/a" bars are replaced by one short note.
+  const hasUsage =
+    typeof usage?.cpu_percent === "number" ||
+    typeof usage?.memory_percent === "number";
 
   return (
     <div className="space-y-5 rounded-xl border border-zinc-800/80 bg-zinc-900/30 p-5">
@@ -1548,20 +1548,48 @@ function MetricsPanel({ metrics }) {
       )}
 
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-        <UsageBar
-          label="CPU usage"
-          icon={Cpu}
-          percent={usage?.cpu_percent}
-          simulated={simulated}
-        />
+        {hasUsage && (
+          <>
+            <UsageBar
+              label="CPU usage"
+              icon={Cpu}
+              percent={usage?.cpu_percent}
+              simulated={simulated}
+            />
 
-        <UsageBar
-          label="Memory usage"
-          icon={MemoryStick}
-          percent={usage?.memory_percent}
-          simulated={simulated}
-        />
+            <UsageBar
+              label="Memory usage"
+              icon={MemoryStick}
+              percent={usage?.memory_percent}
+              simulated={simulated}
+            />
+          </>
+        )}
+
+        {reserved && (
+          <>
+            <UsageBar
+              label="CPU reserved (pod requests)"
+              icon={Cpu}
+              percent={reserved.cpu_percent}
+              simulated={simulated}
+            />
+
+            <UsageBar
+              label="Memory reserved (pod requests)"
+              icon={MemoryStick}
+              percent={reserved.memory_percent}
+              simulated={simulated}
+            />
+          </>
+        )}
       </div>
+
+      {!hasUsage && (
+        <p className="text-[11px] text-zinc-500">
+          Live CPU and memory usage need metrics-server, which this project does not install. "Reserved" shows what pods requested compared with what the nodes can allocate.
+        </p>
+      )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <MetricTile

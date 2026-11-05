@@ -14,6 +14,13 @@ logger = logging.getLogger(__name__)
 
 
 
+def _percent(part: float, total: float):
+    """Percentage rounded to 1 decimal, or None when the total is unknown."""
+    if not total:
+        return None
+    return round(part / total * 100, 1)
+
+
 def _parse_cpu_cores(value) -> float:
     """Kubernetes CPU quantity ("4", "1930m") to cores."""
     if not value:
@@ -25,15 +32,19 @@ def _parse_cpu_cores(value) -> float:
 
 
 def _parse_memory_gib(value) -> float:
-    """Kubernetes memory quantity ("7Gi", "7500000Ki", "8000000000") to GiB."""
+    """Kubernetes memory quantity ("7Gi", "128Mi", "500M", "1e9") to GiB."""
     if not value:
         return 0.0
     text = str(value)
-    units = {"Ki": 1 / 1024 / 1024, "Mi": 1 / 1024, "Gi": 1.0, "Ti": 1024.0}
-    for suffix, factor in units.items():
+    binary = {"Ki": 1 / 1024**2, "Mi": 1 / 1024, "Gi": 1.0, "Ti": 1024.0}
+    decimal = {"k": 1e3, "K": 1e3, "M": 1e6, "G": 1e9, "T": 1e12}
+    for suffix, factor in binary.items():
         if text.endswith(suffix):
             return float(text[: -len(suffix)]) * factor
-    return float(text) / (1024**3)
+    for suffix, factor in decimal.items():
+        if text.endswith(suffix):
+            return float(text[:-1]) * factor / 1024**3
+    return float(text) / 1024**3
 
 
 
@@ -42,18 +53,21 @@ DEMO_METRIC_PROFILES = {
     None: {
         "cpu": 34,
         "memory": 48,
+        "reserved": (41, 36),
         "pods": {"total": 14, "running": 14, "pending": 0, "failed": 0, "restarts": 0},
         "warnings": [],
     },
     "oomkilled": {
         "cpu": 52,
         "memory": 92,
+        "reserved": (41, 36),
         "pods": {"total": 14, "running": 12, "pending": 0, "failed": 1, "restarts": 4},
         "warnings": ["api-service is being OOMKilled (memory limit exceeded)."],
     },
     "crashloop": {
         "cpu": 31,
         "memory": 47,
+        "reserved": (41, 36),
         "pods": {"total": 14, "running": 13, "pending": 1, "failed": 0, "restarts": 0},
         "warnings": [
             "auth-service is stuck in CreateContainerConfigError (missing Secret)."
@@ -62,6 +76,7 @@ DEMO_METRIC_PROFILES = {
     "broken_routing": {
         "cpu": 33,
         "memory": 49,
+        "reserved": (41, 36),
         "pods": {"total": 14, "running": 14, "pending": 0, "failed": 0, "restarts": 0},
         "warnings": [
             "payment-service has no ready endpoints (selector matches no pod)."
@@ -224,6 +239,10 @@ class KubernetesManager:
                     "cpu_percent": round(profile["cpu"] + 3 * wave, 1),
                     "memory_percent": round(profile["memory"] + 2 * wave, 1),
                 },
+                "reserved": {
+                    "cpu_percent": profile["reserved"][0],
+                    "memory_percent": profile["reserved"][1],
+                },
                 "warnings": list(profile["warnings"]),
             }
 
@@ -250,10 +269,25 @@ class KubernetesManager:
 
             phases = {"Running": 0, "Pending": 0, "Failed": 0}
             restarts = 0
+            requested_cpu = 0.0
+            requested_memory = 0.0
             for pod in pods:
                 phase = pod.status.phase
                 if phase in phases:
                     phases[phase] += 1
+                # Pods that are finished (Succeeded/Failed) no longer hold
+                # their requested resources.
+                if phase in ("Running", "Pending"):
+                    for container in pod.spec.containers or []:
+                        requests = (
+                            container.resources.requests
+                            if container.resources
+                            else None
+                        ) or {}
+                        requested_cpu += _parse_cpu_cores(requests.get("cpu"))
+                        requested_memory += _parse_memory_gib(
+                            requests.get("memory")
+                        )
                 for container in pod.status.container_statuses or []:
                     restarts += container.restart_count or 0
 
@@ -285,6 +319,12 @@ class KubernetesManager:
                     "memory_gib": round(memory, 2),
                 },
                 "usage": {"cpu_percent": None, "memory_percent": None},
+                # What pods have RESERVED (their requests) versus what the
+                # nodes can allocate. Real data, no metrics-server needed.
+                "reserved": {
+                    "cpu_percent": _percent(requested_cpu, cpu),
+                    "memory_percent": _percent(requested_memory, memory),
+                },
             }
         except Exception as exc:
             logger.exception("Failed to read live Kubernetes metrics.")
