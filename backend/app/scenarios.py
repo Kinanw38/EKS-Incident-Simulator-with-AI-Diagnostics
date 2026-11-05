@@ -5,6 +5,8 @@ SCENARIOS = {
         "category": "Resource Constraint",
         "severity": "CRITICAL",
         "affected_component": "api-service",
+        # Label value (app=<pod_label>) used to find the pods for telemetry.
+        "pod_label": "api-service",
         "description": "The API deployment container triggers a memory stress test that exceeds allocated limits (64Mi limit vs 150Mi load), causing Linux Cgroups OOM Killer to terminate process exit code 137.",
         "problem_yaml": """apiVersion: apps/v1
 kind: Deployment
@@ -65,7 +67,8 @@ spec:
         "category": "Configuration Error",
         "severity": "HIGH",
         "affected_component": "auth-service",
-        "description": "Auth service fails startup initialization because it references a Kubernetes Secret ('missing-db-secret') that does not exist in the cluster namespace.",
+        "pod_label": "auth-service",
+        "description": "Auth service cannot start because it references a Kubernetes Secret ('missing-db-secret') that does not exist in the namespace. Kubernetes keeps the pod in CreateContainerConfigError: the container is never created, so there are no application logs, only events.",
         "problem_yaml": """apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -134,6 +137,10 @@ spec:
         "category": "Networking",
         "severity": "MEDIUM",
         "affected_component": "payment-service",
+        # The Deployment's pods are labeled app=payment-processor, not payment-service.
+        "pod_label": "payment-processor",
+        # The problem is visible on the Service (no endpoints), not in pod logs.
+        "service_name": "payment-service",
         "description": "Payment service Pods are running and healthy, but the Service selector points to 'app: wrong-label-selector', leaving the Endpoints object empty (<none>).",
         "problem_yaml": """apiVersion: apps/v1
 kind: Deployment
@@ -200,4 +207,4 @@ spec:
     app: payment-processor
 """
     }
-}
+}

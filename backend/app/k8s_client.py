@@ -2,6 +2,7 @@ import logging
 import os
 import shlex
 import subprocess
+import time
 
 import yaml
 from kubernetes import client, config
@@ -29,6 +30,7 @@ class KubernetesManager:
         self.connected = False
         self.v1 = None
         self.apps_v1 = None
+        self.discovery_v1 = None
         self.connection_error = None
 
         self.force_demo = (
@@ -58,6 +60,7 @@ class KubernetesManager:
 
             self.v1 = client.CoreV1Api()
             self.apps_v1 = client.AppsV1Api()
+            self.discovery_v1 = client.DiscoveryV1Api()
 
             # Verify that the API server is reachable and credentials work.
             self.v1.list_namespace(_request_timeout=5)
@@ -137,12 +140,46 @@ class KubernetesManager:
                 "healthy_nodes": 0,
             }
 
+    def get_service_endpoints_summary(
+        self,
+        service_name: str,
+        namespace: str = "default",
+    ) -> str:
+        """Describe how many ready endpoints a Service has (live mode only).
+
+        Uses EndpointSlice, because the older Endpoints API is deprecated.
+        """
+        try:
+            slices = self.discovery_v1.list_namespaced_endpoint_slice(
+                namespace=namespace,
+                label_selector=f"kubernetes.io/service-name={service_name}",
+                _request_timeout=10,
+            )
+            ready = 0
+            for endpoint_slice in slices.items:
+                for endpoint in endpoint_slice.endpoints or []:
+                    conditions = endpoint.conditions
+                    if conditions is None or conditions.ready is not False:
+                        ready += 1
+            return (
+                f"Service '{service_name}' has {ready} ready endpoint(s)."
+                + (" Traffic cannot reach any pod." if ready == 0 else "")
+            )
+        except Exception as exc:
+            return f"Could not read endpoints for Service '{service_name}': {exc}"
+
     def get_telemetry_for_component(
         self,
         label_selector: str,
         namespace: str = "default",
+        service_name: str | None = None,
     ) -> tuple[str, str]:
-        """Fetch live pod logs and events for RCA analysis."""
+        """Fetch live pod logs and events for RCA analysis.
+
+        label_selector is the value of the pod label "app". If service_name
+        is given, the Service's endpoint status is appended to the events,
+        because routing problems are not visible in pod logs.
+        """
         if self.force_demo:
             return (
                 "Demo mode active - deterministic mock logs.",
@@ -202,6 +239,11 @@ class KubernetesManager:
 
             if not events:
                 events = "No specific events logged for this pod."
+
+            if service_name:
+                events += "\n" + self.get_service_endpoints_summary(
+                    service_name, namespace
+                )
 
             return logs, events
 
@@ -308,6 +350,56 @@ class KubernetesManager:
         except Exception as exc:
             raise RuntimeError(f"Failed to apply manifest: {exc}") from exc
 
+    def wait_for_deployments_ready(
+        self,
+        manifest_yaml: str,
+        timeout_seconds: int = 60,
+        poll_seconds: int = 3,
+    ) -> dict:
+        """Check whether the Deployments in a manifest become available.
+
+        Demo mode simulates the check. In live mode it polls the real
+        Deployment status instead of claiming success.
+        """
+        if self.force_demo:
+            return {"verified": False, "simulated": True, "details": []}
+
+        names = []
+        for document in yaml.safe_load_all(manifest_yaml):
+            if document and document.get("kind") == "Deployment":
+                metadata = document.get("metadata", {})
+                names.append(
+                    (metadata["name"], metadata.get("namespace", "default"))
+                )
+
+        if not names:
+            return {"verified": True, "simulated": False, "details": []}
+
+        deadline = time.monotonic() + timeout_seconds
+        details = []
+
+        while True:
+            details = []
+            all_ready = True
+
+            for name, namespace in names:
+                deployment = self.apps_v1.read_namespaced_deployment_status(
+                    name=name, namespace=namespace
+                )
+                desired = deployment.spec.replicas or 0
+                ready = deployment.status.ready_replicas or 0
+                details.append(f"{name}: {ready}/{desired} ready")
+                if ready < desired:
+                    all_ready = False
+
+            if all_ready:
+                return {"verified": True, "simulated": False, "details": details}
+
+            if time.monotonic() >= deadline:
+                return {"verified": False, "simulated": False, "details": details}
+
+            time.sleep(poll_seconds)
+
     def execute_terminal_cmd(self, command: str) -> str:
         """
         Execute an already allowlisted kubectl command.
@@ -363,10 +455,10 @@ class KubernetesManager:
 
         if normalized_command == "kubectl get pods":
             return (
-                "NAME                              READY   STATUS             RESTARTS   AGE\n"
-                "api-service-8646b9657c-x92kl     0/1     OOMKilled          4          2m15s\n"
-                "auth-service-758dfc489d-p4l89     0/1     CrashLoopBackOff   3          1m40s\n"
-                "payment-backend-5c8bd456f-m9qwx  1/1     Running            0          5m10s"
+                "NAME                              READY   STATUS                       RESTARTS   AGE\n"
+                "api-service-8646b9657c-x92kl     0/1     OOMKilled                    4          2m15s\n"
+                "auth-service-758dfc489d-p4l89     0/1     CreateContainerConfigError   0          1m40s\n"
+                "payment-backend-5c8bd456f-m9qwx  1/1     Running                      0          5m10s"
             )
 
         if normalized_command == "kubectl get services":
@@ -380,7 +472,7 @@ class KubernetesManager:
             return (
                 "LAST SEEN   TYPE      REASON      OBJECT                        MESSAGE\n"
                 "12s         Warning   OOMKilled   pod/api-service-8646b9657c    Memory limit of 64Mi exceeded.\n"
-                "45s         Warning   Failed      pod/auth-service-758dfc489d   Secret missing-db-secret was not found."
+                "45s         Warning   Failed      pod/auth-service-758dfc489d   Error: secret \"missing-db-secret\" not found"
             )
 
         if normalized_command == "kubectl get deployments":
@@ -410,4 +502,4 @@ class KubernetesManager:
         )
 
 
-k8s_manager = KubernetesManager()
+k8s_manager = KubernetesManager()
