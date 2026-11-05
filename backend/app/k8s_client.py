@@ -67,34 +67,39 @@ def _parse_memory_gib(value) -> float:
 
 # Simulated dashboard numbers for demo mode, per active incident.
 DEMO_METRIC_PROFILES = {
+    # Baseline of a fresh 2-node EKS cluster: aws-node x2, kube-proxy x2,
+    # coredns x2 and metrics-server x1 = 7 system pods. An incident adds the
+    # one workload pod of that scenario. "unhealthy" = Pending, Failed, or
+    # Running but not Ready (an OOMKilled or crash-looping pod is still in
+    # phase Running while Kubernetes keeps restarting it).
     None: {
-        "cpu": 34,
-        "memory": 48,
-        "reserved": (41, 36),
-        "pods": {"total": 14, "running": 14, "pending": 0, "failed": 0, "restarts": 0},
+        "cpu": 24,
+        "memory": 41,
+        "reserved": (19, 22),
+        "pods": {"total": 7, "running": 7, "pending": 0, "failed": 0, "unhealthy": 0, "restarts": 0},
         "warnings": [],
     },
     "oomkilled": {
-        "cpu": 52,
-        "memory": 92,
-        "reserved": (41, 36),
-        "pods": {"total": 14, "running": 12, "pending": 0, "failed": 1, "restarts": 4},
+        "cpu": 41,
+        "memory": 62,
+        "reserved": (20, 23),
+        "pods": {"total": 8, "running": 8, "pending": 0, "failed": 0, "unhealthy": 1, "restarts": 4},
         "warnings": ["api-service is being OOMKilled (memory limit exceeded)."],
     },
     "crashloop": {
-        "cpu": 31,
-        "memory": 47,
-        "reserved": (41, 36),
-        "pods": {"total": 14, "running": 13, "pending": 1, "failed": 0, "restarts": 0},
+        "cpu": 25,
+        "memory": 42,
+        "reserved": (20, 23),
+        "pods": {"total": 8, "running": 7, "pending": 1, "failed": 0, "unhealthy": 1, "restarts": 0},
         "warnings": [
             "auth-service is stuck in CreateContainerConfigError (missing Secret)."
         ],
     },
     "broken_routing": {
-        "cpu": 33,
-        "memory": 49,
-        "reserved": (41, 36),
-        "pods": {"total": 14, "running": 14, "pending": 0, "failed": 0, "restarts": 0},
+        "cpu": 26,
+        "memory": 42,
+        "reserved": (20, 23),
+        "pods": {"total": 8, "running": 8, "pending": 0, "failed": 0, "unhealthy": 0, "restarts": 0},
         "warnings": [
             "payment-service has no ready endpoints (selector matches no pod)."
         ],
@@ -252,7 +257,7 @@ class KubernetesManager:
                 "incident": incident if incident in DEMO_METRIC_PROFILES else None,
                 "nodes": {"total": 2, "ready": 2},
                 "pods": dict(profile["pods"]),
-                "capacity": {"cpu_cores": 4.0, "memory_gib": 7.4},
+                "capacity": {"cpu_cores": 3.86, "memory_gib": 6.4},
                 "usage": {
                     "cpu_percent": _demo_wobble(profile["cpu"], now, 1, 9),
                     "memory_percent": _demo_wobble(profile["memory"], now, 2, 5),
@@ -287,12 +292,22 @@ class KubernetesManager:
 
             phases = {"Running": 0, "Pending": 0, "Failed": 0}
             restarts = 0
+            unhealthy = 0
             requested_cpu = 0.0
             requested_memory = 0.0
             for pod in pods:
                 phase = pod.status.phase
                 if phase in phases:
                     phases[phase] += 1
+                statuses = pod.status.container_statuses or []
+                if (
+                    phase in ("Pending", "Failed")
+                    or (
+                        phase == "Running"
+                        and any(not c.ready for c in statuses)
+                    )
+                ):
+                    unhealthy += 1
                 # Pods that are finished (Succeeded/Failed) no longer hold
                 # their requested resources.
                 if phase in ("Running", "Pending"):
@@ -332,6 +347,7 @@ class KubernetesManager:
                     "running": phases["Running"],
                     "pending": phases["Pending"],
                     "failed": phases["Failed"],
+                    "unhealthy": unhealthy,
                     "restarts": restarts,
                 },
                 "capacity": {

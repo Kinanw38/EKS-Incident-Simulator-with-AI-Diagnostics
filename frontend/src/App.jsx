@@ -1537,6 +1537,7 @@ function MetricsPanel({ metrics }) {
   const { nodes, pods, capacity, usage, simulated } = metrics;
   const warnings = metrics.warnings || [];
   const reserved = metrics.reserved;
+  const unhealthyPods = pods.unhealthy ?? pods.pending + pods.failed;
   // Live clusters have no CPU/memory usage unless metrics-server is installed.
   // Then the two empty "n/a" bars are replaced by one short note.
   const hasUsage =
@@ -1632,9 +1633,10 @@ function MetricsPanel({ metrics }) {
 
         <MetricTile
           icon={AlertOctagon}
-          label="Pending / Failed"
-          value={`${pods.pending} / ${pods.failed}`}
-          warn={pods.pending + pods.failed > 0}
+          label="Unhealthy pods"
+          value={unhealthyPods}
+          sub="Pending, failed, or not Ready"
+          warn={unhealthyPods > 0}
         />
 
         <MetricTile

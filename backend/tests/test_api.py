@@ -100,10 +100,10 @@ def test_demo_metrics_follow_the_active_incident(client):
     routing = client.get("/api/metrics?incident=broken_routing").json()
 
     assert healthy["warnings"] == []
-    assert healthy["pods"]["failed"] == 0 and healthy["pods"]["restarts"] == 0
+    assert healthy["pods"]["unhealthy"] == 0 and healthy["pods"]["restarts"] == 0
 
-    assert oom["usage"]["memory_percent"] > 85
-    assert oom["pods"]["failed"] == 1 and oom["pods"]["restarts"] > 0
+    assert oom["usage"]["memory_percent"] > healthy["usage"]["memory_percent"] + 10
+    assert oom["pods"]["unhealthy"] == 1 and oom["pods"]["restarts"] > 0
 
     assert secret["pods"]["pending"] == 1 and secret["warnings"]
     assert routing["warnings"] and routing["pods"]["failed"] == 0

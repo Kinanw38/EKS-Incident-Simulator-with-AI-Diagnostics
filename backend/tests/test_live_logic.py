@@ -129,7 +129,7 @@ def test_wait_for_deployments_not_ready_while_old_pods_still_run():
     assert result["verified"] is False
 
 
-def _pod(phase, restarts, cpu="100m", memory="128Mi"):
+def _pod(phase, restarts, cpu="100m", memory="128Mi", ready=True):
     return SimpleNamespace(
         spec=SimpleNamespace(
             containers=[
@@ -142,7 +142,9 @@ def _pod(phase, restarts, cpu="100m", memory="128Mi"):
         ),
         status=SimpleNamespace(
             phase=phase,
-            container_statuses=[SimpleNamespace(restart_count=restarts)],
+            container_statuses=[
+                SimpleNamespace(restart_count=restarts, ready=ready)
+            ],
         ),
     )
 
@@ -158,7 +160,11 @@ def test_live_metrics_use_real_counts_and_no_fake_usage():
     )
     manager.v1.list_node.return_value = SimpleNamespace(items=[node, node])
     manager.v1.list_pod_for_all_namespaces.return_value = SimpleNamespace(
-        items=[_pod("Running", 0), _pod("Running", 2), _pod("Pending", 1)]
+        items=[
+            _pod("Running", 0),
+            _pod("Running", 2, ready=False),  # e.g. CrashLoopBackOff
+            _pod("Pending", 1),
+        ]
     )
 
     result = manager.get_metrics_summary()
@@ -169,6 +175,8 @@ def test_live_metrics_use_real_counts_and_no_fake_usage():
     assert result["pods"]["running"] == 2
     assert result["pods"]["pending"] == 1
     assert result["pods"]["restarts"] == 3
+    # The not-Ready Running pod and the Pending pod are both unhealthy.
+    assert result["pods"]["unhealthy"] == 2
     assert result["capacity"] == {"cpu_cores": 3.86, "memory_gib": 6.0}
     # Usage needs metrics-server: never invent it in live mode.
     assert result["usage"] == {"cpu_percent": None, "memory_percent": None}
