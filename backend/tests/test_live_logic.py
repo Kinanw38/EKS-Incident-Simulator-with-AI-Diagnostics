@@ -15,6 +15,11 @@ def make_live_manager():
     manager.v1 = MagicMock()
     manager.apps_v1 = MagicMock()
     manager.discovery_v1 = MagicMock()
+    manager.custom_objects = MagicMock()
+    # By default there is no metrics-server, like a cluster that never had one.
+    manager.custom_objects.list_cluster_custom_object.side_effect = Exception(
+        "the server could not find the requested resource"
+    )
     return manager
 
 
@@ -122,3 +127,110 @@ def test_wait_for_deployments_not_ready_while_old_pods_still_run():
     )
 
     assert result["verified"] is False
+
+
+def _pod(phase, restarts, cpu="100m", memory="128Mi", ready=True):
+    return SimpleNamespace(
+        spec=SimpleNamespace(
+            containers=[
+                SimpleNamespace(
+                    resources=SimpleNamespace(
+                        requests={"cpu": cpu, "memory": memory}
+                    )
+                )
+            ]
+        ),
+        status=SimpleNamespace(
+            phase=phase,
+            container_statuses=[
+                SimpleNamespace(restart_count=restarts, ready=ready)
+            ],
+        ),
+    )
+
+
+def test_live_metrics_use_real_counts_and_no_fake_usage():
+    manager = make_live_manager()
+    node = SimpleNamespace(
+        metadata=SimpleNamespace(name="node-1"),
+        status=SimpleNamespace(
+            conditions=[SimpleNamespace(type="Ready", status="True")],
+            allocatable={"cpu": "1930m", "memory": "3Gi"},
+        )
+    )
+    manager.v1.list_node.return_value = SimpleNamespace(items=[node, node])
+    manager.v1.list_pod_for_all_namespaces.return_value = SimpleNamespace(
+        items=[
+            _pod("Running", 0),
+            _pod("Running", 2, ready=False),  # e.g. CrashLoopBackOff
+            _pod("Pending", 1),
+        ]
+    )
+
+    result = manager.get_metrics_summary()
+
+    assert result["mode"] == "live"
+    assert result["simulated"] is False
+    assert result["nodes"] == {"total": 2, "ready": 2}
+    assert result["pods"]["running"] == 2
+    assert result["pods"]["pending"] == 1
+    assert result["pods"]["restarts"] == 3
+    # The not-Ready Running pod and the Pending pod are both unhealthy.
+    assert result["pods"]["unhealthy"] == 2
+    assert result["capacity"] == {"cpu_cores": 3.86, "memory_gib": 6.0}
+    # Usage needs metrics-server: never invent it in live mode.
+    assert result["usage"] == {"cpu_percent": None, "memory_percent": None}
+    # 3 pods x (100m, 128Mi) requested vs 3.86 vCPU / 6 GiB allocatable.
+    assert result["reserved"]["cpu_percent"] == round(0.3 / 3.86 * 100, 1)
+    assert result["reserved"]["memory_percent"] == round(0.375 / 6 * 100, 1)
+
+
+def test_quantity_parsers():
+    from app.k8s_client import _parse_cpu_cores, _parse_memory_gib
+
+    assert _parse_cpu_cores("250m") == 0.25
+    assert _parse_cpu_cores("2") == 2.0
+    assert _parse_cpu_cores("500000000n") == 0.5
+    assert _parse_memory_gib("1Gi") == 1.0
+    assert _parse_memory_gib("512Mi") == 0.5
+    assert round(_parse_memory_gib("1G"), 3) == 0.931
+    assert _parse_memory_gib(None) == 0.0
+
+
+def test_metrics_unavailable_when_not_connected():
+    manager = make_live_manager()
+    manager.connected = False
+
+    result = manager.get_metrics_summary()
+
+    assert result["available"] is False
+    assert result["mode"] == "unavailable"
+
+
+def test_live_usage_comes_from_metrics_server_when_available():
+    manager = make_live_manager()
+    node = SimpleNamespace(
+        metadata=SimpleNamespace(name="node-1"),
+        status=SimpleNamespace(
+            conditions=[SimpleNamespace(type="Ready", status="True")],
+            allocatable={"cpu": "2", "memory": "4Gi"},
+        ),
+    )
+    manager.v1.list_node.return_value = SimpleNamespace(items=[node])
+    manager.v1.list_pod_for_all_namespaces.return_value = SimpleNamespace(
+        items=[]
+    )
+    manager.custom_objects.list_cluster_custom_object.side_effect = None
+    manager.custom_objects.list_cluster_custom_object.return_value = {
+        "items": [
+            {
+                "metadata": {"name": "node-1"},
+                # 500 millicores = 25% of 2 cores; 1Gi = 25% of 4Gi
+                "usage": {"cpu": "500000000n", "memory": "1048576Ki"},
+            }
+        ]
+    }
+
+    result = manager.get_metrics_summary()
+
+    assert result["usage"] == {"cpu_percent": 25.0, "memory_percent": 25.0}

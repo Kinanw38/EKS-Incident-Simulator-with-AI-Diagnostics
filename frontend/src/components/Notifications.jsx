@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -39,27 +39,34 @@ function Toast({ toast, removeToast }) {
   const config = TOAST_CONFIG[toast.type] || TOAST_CONFIG.info;
   const Icon = config.icon;
 
+  // App creates a new removeToast function on every render, and the app
+  // re-renders often (health checks, live metrics). If the effect depended on
+  // removeToast, its timers would restart on every render and a toast would
+  // never disappear. The ref keeps the latest function without restarting.
+  const removeToastRef = useRef(removeToast);
+  removeToastRef.current = removeToast;
+
   useEffect(() => {
     const exitTimer = window.setTimeout(() => {
       setExiting(true);
     }, TOAST_VISIBLE_MS);
 
     const removeTimer = window.setTimeout(() => {
-      removeToast(toast.id);
+      removeToastRef.current(toast.id);
     }, TOAST_VISIBLE_MS + TOAST_EXIT_MS);
 
     return () => {
       window.clearTimeout(exitTimer);
       window.clearTimeout(removeTimer);
     };
-  }, [toast.id, removeToast]);
+  }, [toast.id]);
 
   const dismiss = () => {
     if (exiting) return;
     setExiting(true);
 
     window.setTimeout(() => {
-      removeToast(toast.id);
+      removeToastRef.current(toast.id);
     }, TOAST_EXIT_MS);
   };
 
@@ -107,7 +114,7 @@ export default function ToastContainer({ toasts, removeToast }) {
   const visibleToasts = toasts.slice(-3);
 
   return (
-    <div className="pointer-events-none fixed right-4 top-4 z-100 flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-2.5 sm:right-6 sm:top-6">
+    <div className="pointer-events-none fixed bottom-20 right-4 z-100 md:bottom-6 flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-2.5 sm:right-6">
       {visibleToasts.map((toast) => (
         <Toast
           key={toast.id}

@@ -82,3 +82,34 @@ def test_terminal_allows_read_only_commands(client):
 def test_terminal_rejects_dangerous_commands(client, command):
     response = client.post("/api/terminal/execute", json={"command": command})
     assert response.status_code == 403
+
+
+def test_metrics_in_demo_mode_are_marked_simulated(client):
+    body = client.get("/api/metrics").json()
+    assert body["mode"] == "demo"
+    assert body["simulated"] is True
+    assert body["nodes"] == {"total": 2, "ready": 2}
+    assert 0 <= body["usage"]["cpu_percent"] <= 100
+    assert 0 <= body["usage"]["memory_percent"] <= 100
+
+
+def test_demo_metrics_follow_the_active_incident(client):
+    healthy = client.get("/api/metrics").json()
+    oom = client.get("/api/metrics?incident=oomkilled").json()
+    secret = client.get("/api/metrics?incident=crashloop").json()
+    routing = client.get("/api/metrics?incident=broken_routing").json()
+
+    assert healthy["warnings"] == []
+    assert healthy["pods"]["unhealthy"] == 0 and healthy["pods"]["restarts"] == 0
+
+    assert oom["usage"]["memory_percent"] > healthy["usage"]["memory_percent"] + 10
+    assert oom["pods"]["unhealthy"] == 1 and oom["pods"]["restarts"] > 0
+
+    assert secret["pods"]["pending"] == 1 and secret["warnings"]
+    assert routing["warnings"] and routing["pods"]["failed"] == 0
+
+
+def test_unknown_incident_is_ignored(client):
+    body = client.get("/api/metrics?incident=does-not-exist").json()
+    assert body["incident"] is None
+    assert body["warnings"] == []

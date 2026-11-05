@@ -49,7 +49,7 @@ print_error() { echo -e "${RED}❌ $1${NC}" >&2; }
 print_warning() { echo -e "${YELLOW}⚠️  $1${NC}"; }
 print_success() { echo -e "${GREEN}✅ $1${NC}"; }
 
-TOTAL_STEPS=8
+TOTAL_STEPS=9
 
 # Prints a clear header for each phase: what is happening and why.
 step() {
@@ -274,9 +274,25 @@ wait_for_kubernetes() {
   print_success "Kubernetes nodes are Ready."
 }
 
+# metrics-server gives the dashboard real CPU/memory usage in Live Mode.
+# It is one small pod (requests 100m CPU / 200Mi) on the existing nodes and
+# creates no AWS resources. If it fails, the dashboard still works and shows
+# "reserved" numbers instead, so this step never stops the setup.
+install_metrics_server() {
+  CURRENT_PHASE="installing metrics-server"
+  step 6 "Installing metrics-server" "Lets the dashboard show real CPU and memory usage. One small pod, no extra AWS cost."
+
+  if kubectl apply -f "$PROJECT_ROOT/k8s/metrics-server/components.yaml" \
+    && kubectl -n kube-system rollout status deployment/metrics-server --timeout=180s; then
+    print_success "metrics-server is running (usage numbers appear about a minute later)."
+  else
+    print_warning "metrics-server did not become ready. The dashboard will show reserved CPU/memory only."
+  fi
+}
+
 prepare_backend() {
   CURRENT_PHASE="backend preparation"
-  step 6 "Preparing the Python backend" "Creates a private virtual environment and installs the pinned dependencies."
+  step 7 "Preparing the Python backend" "Creates a private virtual environment and installs the pinned dependencies."
 
   if [[ ! -d "$BACKEND_DIR/.venv" ]]; then
     python3 -m venv "$BACKEND_DIR/.venv"
@@ -315,7 +331,7 @@ prepare_backend() {
 
 prepare_frontend() {
   CURRENT_PHASE="frontend preparation"
-  step 7 "Preparing the frontend" "Installs the exact npm packages from package-lock.json."
+  step 8 "Preparing the frontend" "Installs the exact npm packages from package-lock.json."
 
   if [[ ! -d "$FRONTEND_DIR/node_modules" ]]; then
     (
@@ -386,7 +402,7 @@ check_port_free() {
 
 start_backend() {
   CURRENT_PHASE="starting backend"
-  step 8 "Starting the app" "Backend (API) and frontend (dashboard) run on this machine only, at 127.0.0.1."
+  step 9 "Starting the app" "Backend (API) and frontend (dashboard) run on this machine only, at 127.0.0.1."
   echo "Starting the live FastAPI backend..."
 
   stop_existing_service "backend" "$BACKEND_PID_FILE"
@@ -485,6 +501,7 @@ check_prerequisites
 confirm_account_and_cost
 provision_infrastructure
 wait_for_kubernetes
+install_metrics_server
 prepare_backend
 prepare_frontend
 start_backend

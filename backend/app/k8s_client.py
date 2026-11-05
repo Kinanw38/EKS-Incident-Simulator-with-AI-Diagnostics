@@ -1,5 +1,7 @@
 import logging
+import math
 import os
+import random
 import shlex
 import subprocess
 import time
@@ -11,6 +13,98 @@ from kubernetes.client.rest import ApiException
 
 logger = logging.getLogger(__name__)
 
+
+
+def _demo_wobble(base: float, now: float, seed: int, amplitude: float) -> float:
+    """Believable, irregular movement for the simulated demo numbers.
+
+    Two slow waves plus a jump that changes every ~3 seconds. It depends only
+    on the clock (no stored state), so every visitor sees a similar picture
+    and tests can check the allowed range.
+    """
+    slow = math.sin(now / 17 + seed) + 0.6 * math.sin(now / 5.3 + 2 * seed)
+    jump = random.Random(int(now // 3) * 10 + seed).uniform(-1, 1)
+    value = base + amplitude * (0.45 * slow + 0.55 * jump)
+    return round(min(max(value, 1.0), 99.0), 1)
+
+
+def _percent(part: float, total: float):
+    """Percentage rounded to 1 decimal, or None when the total is unknown."""
+    if not total:
+        return None
+    return round(part / total * 100, 1)
+
+
+def _parse_cpu_cores(value) -> float:
+    """Kubernetes CPU quantity ("4", "1930m") to cores."""
+    if not value:
+        return 0.0
+    text = str(value)
+    # metrics-server reports usage in nanocores ("123456789n"); node and pod
+    # specs use millicores ("250m") or plain cores ("2").
+    scale = {"n": 1e9, "u": 1e6, "m": 1e3}
+    if text[-1] in scale:
+        return float(text[:-1]) / scale[text[-1]]
+    return float(text)
+
+
+def _parse_memory_gib(value) -> float:
+    """Kubernetes memory quantity ("7Gi", "128Mi", "500M", "1e9") to GiB."""
+    if not value:
+        return 0.0
+    text = str(value)
+    binary = {"Ki": 1 / 1024**2, "Mi": 1 / 1024, "Gi": 1.0, "Ti": 1024.0}
+    decimal = {"k": 1e3, "K": 1e3, "M": 1e6, "G": 1e9, "T": 1e12}
+    for suffix, factor in binary.items():
+        if text.endswith(suffix):
+            return float(text[: -len(suffix)]) * factor
+    for suffix, factor in decimal.items():
+        if text.endswith(suffix):
+            return float(text[:-1]) * factor / 1024**3
+    return float(text) / 1024**3
+
+
+
+# Simulated dashboard numbers for demo mode, per active incident.
+DEMO_METRIC_PROFILES = {
+    # Baseline of a fresh 2-node EKS cluster: aws-node x2, kube-proxy x2,
+    # coredns x2 and metrics-server x1 = 7 system pods. An incident adds the
+    # one workload pod of that scenario. "unhealthy" = Pending, Failed, or
+    # Running but not Ready (an OOMKilled or crash-looping pod is still in
+    # phase Running while Kubernetes keeps restarting it).
+    None: {
+        "cpu": 24,
+        "memory": 41,
+        "reserved": (19, 22),
+        "pods": {"total": 7, "running": 7, "pending": 0, "failed": 0, "unhealthy": 0, "restarts": 0},
+        "warnings": [],
+    },
+    "oomkilled": {
+        "cpu": 41,
+        "memory": 62,
+        "reserved": (20, 23),
+        "pods": {"total": 8, "running": 8, "pending": 0, "failed": 0, "unhealthy": 1, "restarts": 4},
+        "warnings": ["api-service is being OOMKilled (memory limit exceeded)."],
+    },
+    "crashloop": {
+        "cpu": 25,
+        "memory": 42,
+        "reserved": (20, 23),
+        "pods": {"total": 8, "running": 7, "pending": 1, "failed": 0, "unhealthy": 1, "restarts": 0},
+        "warnings": [
+            "auth-service is stuck in CreateContainerConfigError (missing Secret)."
+        ],
+    },
+    "broken_routing": {
+        "cpu": 26,
+        "memory": 42,
+        "reserved": (20, 23),
+        "pods": {"total": 8, "running": 8, "pending": 0, "failed": 0, "unhealthy": 0, "restarts": 0},
+        "warnings": [
+            "payment-service has no ready endpoints (selector matches no pod)."
+        ],
+    },
+}
 
 class KubernetesManager:
     """
@@ -31,6 +125,7 @@ class KubernetesManager:
         self.v1 = None
         self.apps_v1 = None
         self.discovery_v1 = None
+        self.custom_objects = None
         self.connection_error = None
 
         self.force_demo = (
@@ -61,6 +156,7 @@ class KubernetesManager:
             self.v1 = client.CoreV1Api()
             self.apps_v1 = client.AppsV1Api()
             self.discovery_v1 = client.DiscoveryV1Api()
+            self.custom_objects = client.CustomObjectsApi()
 
             # Verify that the API server is reachable and credentials work.
             self.v1.list_namespace(_request_timeout=5)
@@ -139,6 +235,179 @@ class KubernetesManager:
                 "node_count": 0,
                 "healthy_nodes": 0,
             }
+
+    def get_metrics_summary(self, incident: str | None = None) -> dict:
+        """Dashboard metrics. Additive endpoint: nothing else depends on it.
+
+        Demo mode returns clearly labelled SIMULATED values. They follow the
+        incident the dashboard says is active (passed in by the caller), so
+        the server keeps no state and visitors never see each other's
+        incidents. Live mode returns only what the Kubernetes API really
+        knows (nodes, pods, restarts, allocatable capacity). CPU/memory
+        *usage* needs metrics-server, which this project does not install,
+        so those fields are None in live mode.
+        """
+        if self.force_demo:
+            profile = DEMO_METRIC_PROFILES.get(incident, DEMO_METRIC_PROFILES[None])
+            now = time.time()
+            return {
+                "mode": "demo",
+                "simulated": True,
+                "available": True,
+                "incident": incident if incident in DEMO_METRIC_PROFILES else None,
+                "nodes": {"total": 2, "ready": 2},
+                "pods": dict(profile["pods"]),
+                "capacity": {"cpu_cores": 3.86, "memory_gib": 6.4},
+                "usage": {
+                    "cpu_percent": _demo_wobble(profile["cpu"], now, 1, 9),
+                    "memory_percent": _demo_wobble(profile["memory"], now, 2, 5),
+                },
+                "reserved": {
+                    "cpu_percent": profile["reserved"][0],
+                    "memory_percent": profile["reserved"][1],
+                },
+                "warnings": list(profile["warnings"]),
+            }
+
+        if not self.connected:
+            return {
+                "mode": "unavailable",
+                "simulated": False,
+                "available": False,
+                "message": "Live Kubernetes cluster is not reachable.",
+            }
+
+        try:
+            nodes = self.v1.list_node(_request_timeout=5).items
+            pods = self.v1.list_pod_for_all_namespaces(_request_timeout=10).items
+
+            ready = sum(
+                1
+                for node in nodes
+                if any(
+                    c.type == "Ready" and c.status == "True"
+                    for c in (node.status.conditions or [])
+                )
+            )
+
+            phases = {"Running": 0, "Pending": 0, "Failed": 0}
+            restarts = 0
+            unhealthy = 0
+            requested_cpu = 0.0
+            requested_memory = 0.0
+            for pod in pods:
+                phase = pod.status.phase
+                if phase in phases:
+                    phases[phase] += 1
+                statuses = pod.status.container_statuses or []
+                if (
+                    phase in ("Pending", "Failed")
+                    or (
+                        phase == "Running"
+                        and any(not c.ready for c in statuses)
+                    )
+                ):
+                    unhealthy += 1
+                # Pods that are finished (Succeeded/Failed) no longer hold
+                # their requested resources.
+                if phase in ("Running", "Pending"):
+                    for container in pod.spec.containers or []:
+                        requests = (
+                            container.resources.requests
+                            if container.resources
+                            else None
+                        ) or {}
+                        requested_cpu += _parse_cpu_cores(requests.get("cpu"))
+                        requested_memory += _parse_memory_gib(
+                            requests.get("memory")
+                        )
+                for container in pod.status.container_statuses or []:
+                    restarts += container.restart_count or 0
+
+            cpu = sum(
+                _parse_cpu_cores(node.status.allocatable.get("cpu"))
+                for node in nodes
+                if node.status.allocatable
+            )
+            memory = sum(
+                _parse_memory_gib(node.status.allocatable.get("memory"))
+                for node in nodes
+                if node.status.allocatable
+            )
+
+            usage = self._read_node_usage(nodes)
+
+            return {
+                "mode": "live",
+                "simulated": False,
+                "available": True,
+                "nodes": {"total": len(nodes), "ready": ready},
+                "pods": {
+                    "total": len(pods),
+                    "running": phases["Running"],
+                    "pending": phases["Pending"],
+                    "failed": phases["Failed"],
+                    "unhealthy": unhealthy,
+                    "restarts": restarts,
+                },
+                "capacity": {
+                    "cpu_cores": round(cpu, 2),
+                    "memory_gib": round(memory, 2),
+                },
+                "usage": usage,
+                # What pods have RESERVED (their requests) versus what the
+                # nodes can allocate. Real data, no metrics-server needed.
+                "reserved": {
+                    "cpu_percent": _percent(requested_cpu, cpu),
+                    "memory_percent": _percent(requested_memory, memory),
+                },
+            }
+        except Exception as exc:
+            logger.exception("Failed to read live Kubernetes metrics.")
+            return {
+                "mode": "unavailable",
+                "simulated": False,
+                "available": False,
+                "message": f"The Kubernetes API request failed: {exc}",
+            }
+
+    def _read_node_usage(self, nodes) -> dict:
+        """Real CPU/memory usage from metrics-server, or None values.
+
+        metrics-server takes about a minute after setup to return data, and
+        may be missing on clusters not created by setup.sh. Either way this
+        returns None values instead of raising, and the dashboard falls back
+        to the "reserved" numbers.
+        """
+        empty = {"cpu_percent": None, "memory_percent": None}
+
+        try:
+            response = self.custom_objects.list_cluster_custom_object(
+                "metrics.k8s.io", "v1beta1", "nodes", _request_timeout=5
+            )
+            reported = {
+                item["metadata"]["name"]: item["usage"]
+                for item in response.get("items", [])
+            }
+        except Exception:
+            return empty
+
+        used_cpu = used_memory = total_cpu = total_memory = 0.0
+        for node in nodes:
+            usage = reported.get(node.metadata.name)
+            if usage is None or not node.status.allocatable:
+                continue
+            used_cpu += _parse_cpu_cores(usage.get("cpu"))
+            used_memory += _parse_memory_gib(usage.get("memory"))
+            total_cpu += _parse_cpu_cores(node.status.allocatable.get("cpu"))
+            total_memory += _parse_memory_gib(
+                node.status.allocatable.get("memory")
+            )
+
+        return {
+            "cpu_percent": _percent(used_cpu, total_cpu),
+            "memory_percent": _percent(used_memory, total_memory),
+        }
 
     def get_service_endpoints_summary(
         self,
