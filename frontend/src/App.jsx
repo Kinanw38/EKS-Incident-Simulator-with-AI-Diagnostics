@@ -549,7 +549,7 @@ export default function App() {
               </h1>
 
               <p className="font-mono text-[10px] text-zinc-500">
-                v1.0.0 • AI-SRE Control
+                v2.0.0 • AI-SRE Control
               </p>
             </div>
           </div>
