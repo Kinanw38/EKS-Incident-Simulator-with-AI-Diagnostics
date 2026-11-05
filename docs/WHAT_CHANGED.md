@@ -79,3 +79,21 @@
 - הרצת תרחיש ותיקון: האם `/api/remediate` מחזיר `RESOLVED` אחרי שהפוד מוכן.
 - `setup.sh` מזהה IP, וה-endpoint של EKS נגיש רק ממנו.
 - אחרי ה-`terraform init` הראשון: לעשות commit ל-`terraform/.terraform.lock.hcl`.
+
+---
+
+# Stage 2
+
+## 10. נרמול סיומות שורה (`.gitattributes`)
+
+- **מה שונה:** נוסף `.gitattributes` (`* text=auto eol=lf`) וכל הקבצים נורמלו ל-LF ב-commit נפרד.
+- **למה:** קבצים עם CRLF ו-LF מעורבים שברו את `terraform fmt` ב-CI. עכשיו ה-diffs נקיים.
+- **בראיון:** "קבצים מעורבים גרמו לכשל ב-CI, אז קבעתי LF בכל הריפו עם `.gitattributes`."
+
+## 11. שדרוג `vite` ל-8 (מייג'ור)
+
+- **מה שונה:** `vite` עלה מ-7 ל-8.3.x (`npm install -D vite@^8.3.5`). `npm run build` עובר.
+- **למה:** Dependabot הציע את זה כמייג'ור. במקום להתעלם ממייג'ורים, שדרגתי בצורה מבוקרת, תלות אחת בכל commit.
+- **שים לב:** vite 8 דורש Node ‏`^20.19` או `>=22.12`. ב-CI מוגדר Node 22 ולכן זה בסדר.
+- **בראיון:** "שדרגתי מייג'ור אחד בכל פעם, ואחרי כל שדרוג הרצתי build לפני commit."
+- **בפרודקשן:** הייתי בודק גם את ה-preview ואת ה-dev server, לא רק build.
