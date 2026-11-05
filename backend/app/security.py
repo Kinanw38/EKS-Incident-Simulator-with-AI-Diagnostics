@@ -9,7 +9,8 @@ ALLOWED_PATTERNS = [
     r"^kubectl describe (pod|service|deployment|node) [a-zA-Z0-9-]+( -n [a-zA-Z0-9-]+)?$",
     r"^kubectl logs [a-zA-Z0-9-]+( --tail=[0-9]+)?( -n [a-zA-Z0-9-]+)?$",
     r"^kubectl cluster-info$",
-    r"^kubectl version --short$",
+    # "--short" was removed from kubectl in v1.28, so it is not allowed here.
+    r"^kubectl version( --client)?$",
 ]
 
 
@@ -68,4 +69,4 @@ def is_command_allowed(command: str) -> tuple[bool, str]:
             "Security violation: command is not included "
             "in the Zero-Trust allowlist."
         ),
-    )
+    )

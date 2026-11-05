@@ -1,6 +1,10 @@
-import os
 import json
+import logging
+import os
+
 import requests
+
+logger = logging.getLogger(__name__)
 
 
 def analyze_incident_telemetry(incident_id: str, logs: str, events: str) -> dict:
@@ -10,6 +14,9 @@ def analyze_incident_telemetry(incident_id: str, logs: str, events: str) -> dict
     OR if it responds but doesn't return the structured fields we need.
     """
     ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
+    # (connect timeout, read timeout) in seconds. A local LLM can take a while
+    # to answer, but an unreachable Ollama should fail fast.
+    ollama_timeout = (2, float(os.getenv("OLLAMA_TIMEOUT", "30")))
 
     prompt = f"""
     You are an expert Kubernetes Reliability Engineer (SRE).
@@ -29,7 +36,7 @@ def analyze_incident_telemetry(incident_id: str, logs: str, events: str) -> dict
         response = requests.post(
             ollama_url,
             json={"model": "llama3", "prompt": prompt, "stream": False, "format": "json"},
-            timeout=3
+            timeout=ollama_timeout
         )
         if response.status_code == 200:
             raw_text = response.json().get("response", "")
@@ -45,8 +52,16 @@ def analyze_incident_telemetry(incident_id: str, logs: str, events: str) -> dict
                     "impact": parsed["impact"],
                     "recommended_fix": parsed["recommended_fix"]
                 }
-    except Exception:
-        pass
+            logger.warning(
+                "Ollama response is missing required keys; using the fallback."
+            )
+        else:
+            logger.warning(
+                "Ollama returned HTTP %s; using the fallback.",
+                response.status_code,
+            )
+    except Exception as exc:
+        logger.info("Ollama is not usable (%s); using the fallback.", exc)
 
     # Deterministic Expert Fallback (Guarantees 100% Reliability)
     fallback_database = {
@@ -57,7 +72,7 @@ def analyze_incident_telemetry(incident_id: str, logs: str, events: str) -> dict
         },
         "crashloop": {
             "root_cause": "Failed environment variable population due to missing Kubernetes Secret 'missing-db-secret'.",
-            "impact": "Auth container exits immediately upon initialization with status CrashLoopBackOff.",
+            "impact": "The pod stays in CreateContainerConfigError: the container is never created, so the auth service never starts.",
             "recommended_fix": "Create Opaque Secret 'missing-db-secret' containing key 'password'."
         },
         "broken_routing": {
@@ -78,4 +93,4 @@ def analyze_incident_telemetry(incident_id: str, logs: str, events: str) -> dict
         "root_cause": expert_data["root_cause"],
         "impact": expert_data["impact"],
         "recommended_fix": expert_data["recommended_fix"]
-    }
+    }

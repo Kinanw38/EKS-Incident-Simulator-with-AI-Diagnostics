@@ -34,6 +34,7 @@ resource "aws_eks_cluster" "main" {
     subnet_ids              = concat(aws_subnet.public[*].id, aws_subnet.private[*].id)
     endpoint_private_access = true
     endpoint_public_access  = true
+    public_access_cidrs     = var.public_access_cidrs
   }
 
   enabled_cluster_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
@@ -99,4 +100,4 @@ resource "aws_eks_node_group" "main" {
     aws_nat_gateway.nat,
     aws_route_table_association.private
   ]
-}
+}

@@ -2,7 +2,6 @@
 # Terraform & AWS Secrets
 # ==========================================
 **/terraform/.terraform/
-**/terraform/.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
 *.tfvars
@@ -94,4 +93,4 @@ Thumbs.db
 # ==========================================
 ai-project-context.txt
 terraformfiles.txt
-kinanw38-eks-incident-simulator*.txt
+kinanw38-eks-incident-simulator*.txt
