@@ -1,0 +1,27 @@
+# Example: remote Terraform state in S3, for a TEAM (not used by this project).
+#
+# Why it is not enabled here: the S3 bucket must exist BEFORE Terraform runs, so
+# it cannot be created by this same configuration. It would be an extra,
+# manually created AWS resource that outlives "terraform destroy" (the opposite
+# of what this simulator wants), and this project is a single-user, short-lived
+# lab. Local state is a deliberate choice, see "Design Decisions" in the README.
+#
+# To use it in a team:
+#   1. Create a private, versioned, encrypted S3 bucket (outside this project).
+#   2. Copy this file to terraform/backend.tf and fill in the bucket name.
+#   3. Run: terraform init -migrate-state
+#
+# State locking stops two people from applying at the same time:
+#   - Terraform 1.10 or newer: use_lockfile = true (locks inside the bucket).
+#   - Older versions: a DynamoDB table with a "LockID" string key and
+#     dynamodb_table = "<table name>".
+#
+# terraform {
+#   backend "s3" {
+#     bucket       = "<your-private-state-bucket>"
+#     key          = "eks-incident-simulator/terraform.tfstate"
+#     region       = "us-east-1"
+#     encrypt      = true
+#     use_lockfile = true
+#   }
+# }
