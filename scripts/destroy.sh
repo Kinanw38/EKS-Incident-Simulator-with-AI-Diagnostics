@@ -256,7 +256,9 @@ cd "$TERRAFORM_DIR"
 destroyed=false
 for attempt in 1 2 3; do
   echo "  Attempt $attempt/3"
-  if terraform destroy -auto-approve; then
+  # public_access_cidrs has no default on purpose (see variables.tf). Its value
+  # is irrelevant when destroying, but Terraform still needs one to load the config.
+  if terraform destroy -auto-approve -var 'public_access_cidrs=["127.0.0.1/32"]'; then
     destroyed=true
     break
   fi
@@ -295,14 +297,57 @@ check() {
 CURRENT_PHASE="post-destroy verification"
 step 6 "Verifying nothing is left behind" "Asks AWS directly. Leftovers keep costing money."
 
-tagged="$(aws resourcegroupstaggingapi get-resources --region "$AWS_REGION_VALUE" \
-  --tag-filters "Key=${PROJECT_TAG_KEY},Values=${PROJECT_TAG_VALUE}" \
-  --query 'length(ResourceTagMappingList)' --output text 2>/dev/null || echo "?")"
-if [[ "$tagged" == "?" ]]; then
+# The tag index lags behind reality: a resource that was just deleted can stay
+# listed for a while (a deleted NAT gateway is even kept by EC2 for about an
+# hour, with state "deleted"). So the check retries a few times, and ignores
+# NAT gateways whose state is "deleted". Anything still listed is printed.
+list_tagged_leftovers() {
+  local arns arn state
+  arns="$(aws resourcegroupstaggingapi get-resources --region "$AWS_REGION_VALUE" \
+    --tag-filters "Key=${PROJECT_TAG_KEY},Values=${PROJECT_TAG_VALUE}" \
+    --query 'ResourceTagMappingList[].ResourceARN' --output text 2>/dev/null)" || return 1
+
+  for arn in $arns; do
+    if [[ "$arn" == *":natgateway/"* ]]; then
+      state="$(aws ec2 describe-nat-gateways --region "$AWS_REGION_VALUE" \
+        --nat-gateway-ids "${arn##*/}" --query 'NatGateways[0].State' \
+        --output text 2>/dev/null || echo unknown)"
+      if [[ "$state" == "deleted" ]]; then
+        continue
+      fi
+    fi
+    echo "$arn"
+  done
+}
+
+TAG_LEFTOVERS=""
+tag_query_ok=true
+for attempt in 1 2 3 4 5 6; do
+  if ! TAG_LEFTOVERS="$(list_tagged_leftovers)"; then
+    tag_query_ok=false
+    break
+  fi
+  if [[ -z "$TAG_LEFTOVERS" ]]; then
+    break
+  fi
+  if (( attempt < 6 )); then
+    echo "  Tagged resources still listed (the index can lag). Checking again in 20s... ($attempt/6)"
+    sleep 20
+  fi
+done
+
+if [[ "$tag_query_ok" != "true" ]]; then
   echo -e "  ${YELLOW}SKIP${NC}  Tagged resources: the query failed (check your permissions)."
+elif [[ -z "$TAG_LEFTOVERS" ]]; then
+  echo -e "  ${GREEN}PASS${NC}  No resources tagged ${PROJECT_TAG_KEY}=${PROJECT_TAG_VALUE}"
 else
-  check "No resources tagged ${PROJECT_TAG_KEY}=${PROJECT_TAG_VALUE}" "$tagged" \
-    "The tag index can lag a few minutes; rerun the check later in the console (Resource Groups > Tag Editor)."
+  tagged_count="$(echo "$TAG_LEFTOVERS" | wc -l | tr -d ' ')"
+  check "No resources tagged ${PROJECT_TAG_KEY}=${PROJECT_TAG_VALUE}" "$tagged_count" \
+    "Still listed after a couple of minutes (the tag index can lag up to an hour)."
+  while IFS= read -r leftover_arn; do
+    echo "        - $leftover_arn"
+  done <<< "$TAG_LEFTOVERS"
+  echo "        Check one: aws resourcegroupstaggingapi get-resources --tag-filters Key=${PROJECT_TAG_KEY},Values=${PROJECT_TAG_VALUE}"
 fi
 
 if [[ -n "$CLUSTER_NAME" ]]; then

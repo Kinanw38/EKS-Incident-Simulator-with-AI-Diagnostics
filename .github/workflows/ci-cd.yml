@@ -72,6 +72,19 @@ jobs:
           cd backend
           python -m pytest -q
 
+  shell-checks:
+    name: "Shell Scripts (shellcheck & tests)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: ShellCheck
+        run: shellcheck -x -P SCRIPTDIR scripts/*.sh scripts/lib/*.sh scripts/tests/*.sh
+
+      - name: CIDR helper tests
+        run: bash scripts/tests/cidr_test.sh
+
   frontend-build:
     name: "Frontend Build"
     runs-on: ubuntu-latest
@@ -94,7 +107,7 @@ jobs:
 
   docker-build:
     name: "Docker Build Verification"
-    needs: [terraform-checks, backend-checks, frontend-build]
+    needs: [terraform-checks, backend-checks, frontend-build, shell-checks]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
