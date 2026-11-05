@@ -100,4 +100,4 @@ resource "aws_eks_node_group" "main" {
     aws_nat_gateway.nat,
     aws_route_table_association.private
   ]
-}
+}

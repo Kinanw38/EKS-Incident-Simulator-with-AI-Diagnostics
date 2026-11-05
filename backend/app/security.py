@@ -69,4 +69,4 @@ def is_command_allowed(command: str) -> tuple[bool, str]:
             "Security violation: command is not included "
             "in the Zero-Trust allowlist."
         ),
-    )
+    )
