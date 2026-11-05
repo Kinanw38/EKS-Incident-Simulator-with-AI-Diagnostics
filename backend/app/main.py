@@ -157,7 +157,13 @@ def get_rca(incident_id: str):
         raise HTTPException(status_code=404, detail="Incident scenario not found.")
 
     component = scenario.get("affected_component", "api-service")
-    logs, events = k8s_manager.get_telemetry_for_component(component)
+    # Pods are found by their "app" label, which is not always the same as
+    # the affected component's name (e.g. the payment Service vs its pods).
+    pod_label = scenario.get("pod_label", component)
+    logs, events = k8s_manager.get_telemetry_for_component(
+        pod_label,
+        service_name=scenario.get("service_name"),
+    )
     analysis = analyze_incident_telemetry(incident_id, logs, events)
 
     return {
@@ -177,28 +183,55 @@ def trigger_remediation(req: RemediationRequest):
 
     try:
         result = k8s_manager.apply_manifest(scenario["fix_yaml"])
+        verification = k8s_manager.wait_for_deployments_ready(
+            scenario["fix_yaml"]
+        )
+
+        simulated = verification["simulated"]
+        verified = verification["verified"]
+
+        if simulated:
+            verify_action = "Verifying pod readiness (simulated in demo mode)..."
+            verify_status = "SIMULATED"
+        elif verified:
+            verify_action = "Verified: " + ", ".join(verification["details"])
+            verify_status = "COMPLETED"
+        else:
+            verify_action = (
+                "Not ready after the timeout: "
+                + ", ".join(verification["details"])
+            )
+            verify_status = "TIMEOUT"
+
         reconciliation_steps = [
             {
                 "step": 1,
-                "action": "Inspecting current state manifest...",
+                "action": "Reading the remediation manifest...",
                 "status": "COMPLETED",
             },
             {
                 "step": 2,
-                "action": "Generating YAML Patch delta...",
-                "status": "COMPLETED",
+                "action": "Applying Kubernetes remediation manifest...",
+                "status": "SIMULATED" if simulated else "COMPLETED",
             },
             {
                 "step": 3,
-                "action": "Applying Kubernetes remediation manifest...",
-                "status": "COMPLETED",
-            },
-            {
-                "step": 4,
-                "action": "Verifying Pod Readiness and Liveness probes...",
-                "status": "COMPLETED",
+                "action": verify_action,
+                "status": verify_status,
             },
         ]
+
+        if verify_status == "TIMEOUT":
+            return {
+                "incident_id": req.incident_id,
+                "status": "APPLIED_NOT_READY",
+                "mode": k8s_manager.mode,
+                "reconciliation_loop": reconciliation_steps,
+                "message": (
+                    "The fix was applied, but the workload is not ready yet. "
+                    "Check the pods again in a moment."
+                ),
+            }
 
         return {
             "incident_id": req.incident_id,
