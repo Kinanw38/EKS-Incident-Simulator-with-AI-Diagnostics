@@ -1011,7 +1011,7 @@ function OverviewTab({
         <StatCard
           title="Incident Scenarios"
           value={scenarios.length}
-          subtitle="OOMKilled, CrashLoop, Routing"
+          subtitle="Memory, CPU, config, routing"
           icon={FlaskConical}
           iconClass="text-amber-400"
         />
