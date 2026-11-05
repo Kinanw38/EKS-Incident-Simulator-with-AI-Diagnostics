@@ -36,6 +36,39 @@ def _parse_memory_gib(value) -> float:
     return float(text) / (1024**3)
 
 
+
+# Simulated dashboard numbers for demo mode, per active incident.
+DEMO_METRIC_PROFILES = {
+    None: {
+        "cpu": 34,
+        "memory": 48,
+        "pods": {"total": 14, "running": 14, "pending": 0, "failed": 0, "restarts": 0},
+        "warnings": [],
+    },
+    "oomkilled": {
+        "cpu": 52,
+        "memory": 92,
+        "pods": {"total": 14, "running": 12, "pending": 0, "failed": 1, "restarts": 4},
+        "warnings": ["api-service is being OOMKilled (memory limit exceeded)."],
+    },
+    "crashloop": {
+        "cpu": 31,
+        "memory": 47,
+        "pods": {"total": 14, "running": 13, "pending": 1, "failed": 0, "restarts": 0},
+        "warnings": [
+            "auth-service is stuck in CreateContainerConfigError (missing Secret)."
+        ],
+    },
+    "broken_routing": {
+        "cpu": 33,
+        "memory": 49,
+        "pods": {"total": 14, "running": 14, "pending": 0, "failed": 0, "restarts": 0},
+        "warnings": [
+            "payment-service has no ready endpoints (selector matches no pod)."
+        ],
+    },
+}
+
 class KubernetesManager:
     """
     Kubernetes integration layer.
@@ -164,34 +197,34 @@ class KubernetesManager:
                 "healthy_nodes": 0,
             }
 
-    def get_metrics_summary(self) -> dict:
+    def get_metrics_summary(self, incident: str | None = None) -> dict:
         """Dashboard metrics. Additive endpoint: nothing else depends on it.
 
-        Demo mode returns clearly labelled SIMULATED values. Live mode returns
-        only what the Kubernetes API really knows (nodes, pods, restarts,
-        allocatable capacity). CPU/memory *usage* needs metrics-server, which
-        this project does not install, so those fields are None in live mode.
+        Demo mode returns clearly labelled SIMULATED values. They follow the
+        incident the dashboard says is active (passed in by the caller), so
+        the server keeps no state and visitors never see each other's
+        incidents. Live mode returns only what the Kubernetes API really
+        knows (nodes, pods, restarts, allocatable capacity). CPU/memory
+        *usage* needs metrics-server, which this project does not install,
+        so those fields are None in live mode.
         """
         if self.force_demo:
-            # A slow, deterministic wave so the demo looks alive without randomness.
+            profile = DEMO_METRIC_PROFILES.get(incident, DEMO_METRIC_PROFILES[None])
+            # A slow, small wave so the demo looks alive without randomness.
             wave = math.sin(time.time() / 30)
             return {
                 "mode": "demo",
                 "simulated": True,
                 "available": True,
+                "incident": incident if incident in DEMO_METRIC_PROFILES else None,
                 "nodes": {"total": 2, "ready": 2},
-                "pods": {
-                    "total": 14,
-                    "running": 12,
-                    "pending": 1,
-                    "failed": 1,
-                    "restarts": 7,
-                },
+                "pods": dict(profile["pods"]),
                 "capacity": {"cpu_cores": 4.0, "memory_gib": 7.4},
                 "usage": {
-                    "cpu_percent": round(38 + 9 * wave, 1),
-                    "memory_percent": round(54 + 4 * wave, 1),
+                    "cpu_percent": round(profile["cpu"] + 3 * wave, 1),
+                    "memory_percent": round(profile["memory"] + 2 * wave, 1),
                 },
+                "warnings": list(profile["warnings"]),
             }
 
         if not self.connected:

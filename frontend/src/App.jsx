@@ -154,7 +154,18 @@ export default function App() {
   const [backendReady, setBackendReady] = useState(false);
 
   const healthRequestInFlight = useRef(false);
+  const activeIncidentRef = useRef(null);
+  activeIncidentRef.current = selectedScenario?.id ?? null;
   const initialLoadActive = useRef(true);
+
+  // Refresh the metrics right away when an incident starts or is resolved,
+  // so the dashboard reacts immediately instead of at the next 10s refresh.
+  useEffect(() => {
+    if (backendReady) {
+      fetchMetrics();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedScenario?.id]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -183,6 +194,22 @@ export default function App() {
     );
   };
 
+  // Metrics are optional: an older backend without /api/metrics is fine.
+  // The active incident id only shapes the simulated demo numbers.
+  const fetchMetrics = async () => {
+    const incident = activeIncidentRef.current;
+    const query = incident
+      ? `?incident=${encodeURIComponent(incident)}`
+      : "";
+
+    try {
+      const metricsResponse = await fetch(`${API_BASE}/metrics${query}`);
+      setMetrics(metricsResponse.ok ? await metricsResponse.json() : null);
+    } catch {
+      setMetrics(null);
+    }
+  };
+
   const fetchClusterHealth = async ({ silent = false } = {}) => {
     if (healthRequestInFlight.current) {
       return false;
@@ -206,13 +233,7 @@ export default function App() {
       setLastHealthUpdate(new Date());
       setBackendReady(true);
 
-      // Metrics are optional: an older backend without /api/metrics is fine.
-      try {
-        const metricsResponse = await fetch(`${API_BASE}/metrics`);
-        setMetrics(metricsResponse.ok ? await metricsResponse.json() : null);
-      } catch {
-        setMetrics(null);
-      }
+      await fetchMetrics();
 
       return true;
     } catch (error) {
@@ -1488,6 +1509,7 @@ function MetricsPanel({ metrics }) {
   }
 
   const { nodes, pods, capacity, usage, simulated } = metrics;
+  const warnings = metrics.warnings || [];
 
   return (
     <div className="space-y-5 rounded-xl border border-zinc-800/80 bg-zinc-900/30 p-5">
@@ -1510,6 +1532,20 @@ function MetricsPanel({ metrics }) {
           </span>
         )}
       </div>
+
+      {warnings.length > 0 && (
+        <ul className="space-y-1.5 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3">
+          {warnings.map((warning) => (
+            <li
+              key={warning}
+              className="flex items-start gap-2 text-xs text-amber-400"
+            >
+              <AlertOctagon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              {warning}
+            </li>
+          ))}
+        </ul>
+      )}
 
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         <UsageBar
