@@ -12,6 +12,8 @@ SCENARIOS = {
 kind: Deployment
 metadata:
   name: api-service
+  labels:
+    app.kubernetes.io/part-of: incident-simulator
   namespace: default
 spec:
   replicas: 1
@@ -38,6 +40,8 @@ spec:
 kind: Deployment
 metadata:
   name: api-service
+  labels:
+    app.kubernetes.io/part-of: incident-simulator
   namespace: default
 spec:
   replicas: 1
@@ -73,6 +77,8 @@ spec:
 kind: Deployment
 metadata:
   name: auth-service
+  labels:
+    app.kubernetes.io/part-of: incident-simulator
   namespace: default
 spec:
   replicas: 1
@@ -99,6 +105,8 @@ spec:
 kind: Secret
 metadata:
   name: missing-db-secret
+  labels:
+    app.kubernetes.io/part-of: incident-simulator
   namespace: default
 type: Opaque
 stringData:
@@ -108,6 +116,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: auth-service
+  labels:
+    app.kubernetes.io/part-of: incident-simulator
   namespace: default
 spec:
   replicas: 1
@@ -146,6 +156,8 @@ spec:
 kind: Deployment
 metadata:
   name: payment-backend
+  labels:
+    app.kubernetes.io/part-of: incident-simulator
   namespace: default
 spec:
   replicas: 1
@@ -165,6 +177,8 @@ apiVersion: v1
 kind: Service
 metadata:
   name: payment-service
+  labels:
+    app.kubernetes.io/part-of: incident-simulator
   namespace: default
 spec:
   type: ClusterIP
@@ -178,6 +192,8 @@ spec:
 kind: Deployment
 metadata:
   name: payment-backend
+  labels:
+    app.kubernetes.io/part-of: incident-simulator
   namespace: default
 spec:
   replicas: 1
@@ -197,6 +213,8 @@ apiVersion: v1
 kind: Service
 metadata:
   name: payment-service
+  labels:
+    app.kubernetes.io/part-of: incident-simulator
   namespace: default
 spec:
   type: ClusterIP

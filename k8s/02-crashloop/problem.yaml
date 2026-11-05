@@ -4,6 +4,7 @@ metadata:
   name: auth-service
   namespace: default
   labels:
+    app.kubernetes.io/part-of: incident-simulator
     app: auth-service
     sim-incident: crashloop
 spec:

@@ -71,7 +71,9 @@ def test_wait_for_deployments_ready_reports_real_status():
     manager.apps_v1.read_namespaced_deployment_status.return_value = (
         SimpleNamespace(
             spec=SimpleNamespace(replicas=1),
-            status=SimpleNamespace(ready_replicas=1),
+            status=SimpleNamespace(
+                ready_replicas=1, updated_replicas=1, replicas=1
+            ),
         )
     )
 
@@ -89,7 +91,9 @@ def test_wait_for_deployments_ready_times_out():
     manager.apps_v1.read_namespaced_deployment_status.return_value = (
         SimpleNamespace(
             spec=SimpleNamespace(replicas=1),
-            status=SimpleNamespace(ready_replicas=None),
+            status=SimpleNamespace(
+                ready_replicas=None, updated_replicas=None, replicas=None
+            ),
         )
     )
 
@@ -99,3 +103,22 @@ def test_wait_for_deployments_ready_times_out():
 
     assert result["verified"] is False
     assert result["simulated"] is False
+
+
+def test_wait_for_deployments_not_ready_while_old_pods_still_run():
+    """During a rollout the old pod is Ready, but the new one is not yet."""
+    manager = make_live_manager()
+    manager.apps_v1.read_namespaced_deployment_status.return_value = (
+        SimpleNamespace(
+            spec=SimpleNamespace(replicas=1),
+            status=SimpleNamespace(
+                ready_replicas=1, updated_replicas=0, replicas=2
+            ),
+        )
+    )
+
+    result = manager.wait_for_deployments_ready(
+        SCENARIOS["oomkilled"]["fix_yaml"], timeout_seconds=0, poll_seconds=0
+    )
+
+    assert result["verified"] is False

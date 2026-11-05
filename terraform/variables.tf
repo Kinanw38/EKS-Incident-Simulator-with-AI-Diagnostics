@@ -16,6 +16,17 @@ variable "cluster_name" {
   default     = "incident-sim-cluster"
 }
 
+variable "kubernetes_version" {
+  description = "EKS Kubernetes version. Keep it in STANDARD support: older versions move to extended support, which costs $0.60/h instead of $0.10/h for the control plane. Check: aws eks describe-cluster-versions --region us-east-1"
+  type        = string
+  default     = "1.35"
+
+  validation {
+    condition     = can(regex("^1\\.[0-9]+$", var.kubernetes_version))
+    error_message = "Use a version like \"1.35\" (major.minor, no patch)."
+  }
+}
+
 variable "vpc_cidr" {
   description = "CIDR block for the VPC"
   type        = string
@@ -32,6 +43,11 @@ variable "desired_capacity" {
   description = "Desired capacity for the EKS Node Group"
   type        = number
   default     = 2
+
+  validation {
+    condition     = var.desired_capacity >= var.min_capacity && var.desired_capacity <= var.max_capacity
+    error_message = "Node group sizes must satisfy min_capacity <= desired_capacity <= max_capacity."
+  }
 }
 
 variable "max_capacity" {

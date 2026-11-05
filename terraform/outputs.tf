@@ -3,6 +3,11 @@ output "cluster_name" {
   value       = aws_eks_cluster.main.name
 }
 
+output "cluster_version" {
+  description = "Kubernetes version of the EKS cluster"
+  value       = aws_eks_cluster.main.version
+}
+
 output "cluster_region" {
   description = "AWS Region of the deployed cluster"
   value       = var.aws_region

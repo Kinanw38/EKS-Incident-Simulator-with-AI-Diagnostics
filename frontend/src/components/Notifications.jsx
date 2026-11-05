@@ -71,7 +71,7 @@ function Toast({ toast, removeToast }) {
       role="status"
       aria-live="polite"
     >
-      <div className="pointer-events-none absolute inset-0 bg-white/[0.025]" />
+      <div className="pointer-events-none absolute inset-0 bg-white/2.5" />
 
       <Icon
         className={`relative mt-0.5 h-5 w-5 shrink-0 ${config.iconClass}`}
@@ -85,7 +85,7 @@ function Toast({ toast, removeToast }) {
         )}
 
         {toast.message && (
-          <p className="mt-1 max-h-24 overflow-y-auto break-words whitespace-pre-wrap text-zinc-400">
+          <p className="mt-1 max-h-24 overflow-y-auto wrap-break-word whitespace-pre-wrap text-zinc-400">
             {toast.message}
           </p>
         )}
@@ -107,7 +107,7 @@ export default function ToastContainer({ toasts, removeToast }) {
   const visibleToasts = toasts.slice(-3);
 
   return (
-    <div className="pointer-events-none fixed right-4 top-4 z-[100] flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-2.5 sm:right-6 sm:top-6">
+    <div className="pointer-events-none fixed right-4 top-4 z-100 flex w-[calc(100vw-2rem)] max-w-sm flex-col gap-2.5 sm:right-6 sm:top-6">
       {visibleToasts.map((toast) => (
         <Toast
           key={toast.id}

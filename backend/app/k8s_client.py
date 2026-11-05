@@ -387,9 +387,16 @@ class KubernetesManager:
                     name=name, namespace=namespace
                 )
                 desired = deployment.spec.replicas or 0
-                ready = deployment.status.ready_replicas or 0
+                status = deployment.status
+                ready = status.ready_replicas or 0
+                updated = status.updated_replicas or 0
+                total = status.replicas or 0
                 details.append(f"{name}: {ready}/{desired} ready")
-                if ready < desired:
+                # Same idea as "kubectl rollout status": during a rollout the
+                # OLD pods are still Ready, so ready >= desired alone would
+                # report success too early. We also need all pods to be the
+                # new version and no old pods left.
+                if ready < desired or updated < desired or total > desired:
                     all_ready = False
 
             if all_ready:

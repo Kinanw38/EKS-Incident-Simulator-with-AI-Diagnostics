@@ -4,6 +4,7 @@ metadata:
   name: api-service
   namespace: default
   labels:
+    app.kubernetes.io/part-of: incident-simulator
     app: api-service
     sim-incident: oomkilled
 spec:
