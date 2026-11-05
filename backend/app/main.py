@@ -86,6 +86,12 @@ def health_check():
     }
 
 
+@app.get("/api/metrics")
+def metrics():
+    """Dashboard metrics (simulated in demo mode, real counts in live mode)."""
+    return k8s_manager.get_metrics_summary()
+
+
 @app.get("/api/health-analysis")
 def health_analysis():
     return build_healthy_cluster_response()

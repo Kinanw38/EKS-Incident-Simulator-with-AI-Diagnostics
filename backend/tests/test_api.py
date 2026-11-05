@@ -82,3 +82,12 @@ def test_terminal_allows_read_only_commands(client):
 def test_terminal_rejects_dangerous_commands(client, command):
     response = client.post("/api/terminal/execute", json={"command": command})
     assert response.status_code == 403
+
+
+def test_metrics_in_demo_mode_are_marked_simulated(client):
+    body = client.get("/api/metrics").json()
+    assert body["mode"] == "demo"
+    assert body["simulated"] is True
+    assert body["nodes"] == {"total": 2, "ready": 2}
+    assert 0 <= body["usage"]["cpu_percent"] <= 100
+    assert 0 <= body["usage"]["memory_percent"] <= 100

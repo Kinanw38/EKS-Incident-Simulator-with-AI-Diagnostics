@@ -122,3 +122,48 @@ def test_wait_for_deployments_not_ready_while_old_pods_still_run():
     )
 
     assert result["verified"] is False
+
+
+def _pod(phase, restarts):
+    return SimpleNamespace(
+        status=SimpleNamespace(
+            phase=phase,
+            container_statuses=[SimpleNamespace(restart_count=restarts)],
+        )
+    )
+
+
+def test_live_metrics_use_real_counts_and_no_fake_usage():
+    manager = make_live_manager()
+    node = SimpleNamespace(
+        status=SimpleNamespace(
+            conditions=[SimpleNamespace(type="Ready", status="True")],
+            allocatable={"cpu": "1930m", "memory": "3Gi"},
+        )
+    )
+    manager.v1.list_node.return_value = SimpleNamespace(items=[node, node])
+    manager.v1.list_pod_for_all_namespaces.return_value = SimpleNamespace(
+        items=[_pod("Running", 0), _pod("Running", 2), _pod("Pending", 1)]
+    )
+
+    result = manager.get_metrics_summary()
+
+    assert result["mode"] == "live"
+    assert result["simulated"] is False
+    assert result["nodes"] == {"total": 2, "ready": 2}
+    assert result["pods"]["running"] == 2
+    assert result["pods"]["pending"] == 1
+    assert result["pods"]["restarts"] == 3
+    assert result["capacity"] == {"cpu_cores": 3.86, "memory_gib": 6.0}
+    # Usage needs metrics-server: never invent it in live mode.
+    assert result["usage"] == {"cpu_percent": None, "memory_percent": None}
+
+
+def test_metrics_unavailable_when_not_connected():
+    manager = make_live_manager()
+    manager.connected = False
+
+    result = manager.get_metrics_summary()
+
+    assert result["available"] is False
+    assert result["mode"] == "unavailable"

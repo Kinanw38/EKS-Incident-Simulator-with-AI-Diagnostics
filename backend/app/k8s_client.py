@@ -1,4 +1,5 @@
 import logging
+import math
 import os
 import shlex
 import subprocess
@@ -10,6 +11,29 @@ from kubernetes.client.rest import ApiException
 
 
 logger = logging.getLogger(__name__)
+
+
+
+def _parse_cpu_cores(value) -> float:
+    """Kubernetes CPU quantity ("4", "1930m") to cores."""
+    if not value:
+        return 0.0
+    text = str(value)
+    if text.endswith("m"):
+        return float(text[:-1]) / 1000
+    return float(text)
+
+
+def _parse_memory_gib(value) -> float:
+    """Kubernetes memory quantity ("7Gi", "7500000Ki", "8000000000") to GiB."""
+    if not value:
+        return 0.0
+    text = str(value)
+    units = {"Ki": 1 / 1024 / 1024, "Mi": 1 / 1024, "Gi": 1.0, "Ti": 1024.0}
+    for suffix, factor in units.items():
+        if text.endswith(suffix):
+            return float(text[: -len(suffix)]) * factor
+    return float(text) / (1024**3)
 
 
 class KubernetesManager:
@@ -138,6 +162,104 @@ class KubernetesManager:
                 "error": str(exc),
                 "node_count": 0,
                 "healthy_nodes": 0,
+            }
+
+    def get_metrics_summary(self) -> dict:
+        """Dashboard metrics. Additive endpoint: nothing else depends on it.
+
+        Demo mode returns clearly labelled SIMULATED values. Live mode returns
+        only what the Kubernetes API really knows (nodes, pods, restarts,
+        allocatable capacity). CPU/memory *usage* needs metrics-server, which
+        this project does not install, so those fields are None in live mode.
+        """
+        if self.force_demo:
+            # A slow, deterministic wave so the demo looks alive without randomness.
+            wave = math.sin(time.time() / 30)
+            return {
+                "mode": "demo",
+                "simulated": True,
+                "available": True,
+                "nodes": {"total": 2, "ready": 2},
+                "pods": {
+                    "total": 14,
+                    "running": 12,
+                    "pending": 1,
+                    "failed": 1,
+                    "restarts": 7,
+                },
+                "capacity": {"cpu_cores": 4.0, "memory_gib": 7.4},
+                "usage": {
+                    "cpu_percent": round(38 + 9 * wave, 1),
+                    "memory_percent": round(54 + 4 * wave, 1),
+                },
+            }
+
+        if not self.connected:
+            return {
+                "mode": "unavailable",
+                "simulated": False,
+                "available": False,
+                "message": "Live Kubernetes cluster is not reachable.",
+            }
+
+        try:
+            nodes = self.v1.list_node(_request_timeout=5).items
+            pods = self.v1.list_pod_for_all_namespaces(_request_timeout=10).items
+
+            ready = sum(
+                1
+                for node in nodes
+                if any(
+                    c.type == "Ready" and c.status == "True"
+                    for c in (node.status.conditions or [])
+                )
+            )
+
+            phases = {"Running": 0, "Pending": 0, "Failed": 0}
+            restarts = 0
+            for pod in pods:
+                phase = pod.status.phase
+                if phase in phases:
+                    phases[phase] += 1
+                for container in pod.status.container_statuses or []:
+                    restarts += container.restart_count or 0
+
+            cpu = sum(
+                _parse_cpu_cores(node.status.allocatable.get("cpu"))
+                for node in nodes
+                if node.status.allocatable
+            )
+            memory = sum(
+                _parse_memory_gib(node.status.allocatable.get("memory"))
+                for node in nodes
+                if node.status.allocatable
+            )
+
+            return {
+                "mode": "live",
+                "simulated": False,
+                "available": True,
+                "nodes": {"total": len(nodes), "ready": ready},
+                "pods": {
+                    "total": len(pods),
+                    "running": phases["Running"],
+                    "pending": phases["Pending"],
+                    "failed": phases["Failed"],
+                    "restarts": restarts,
+                },
+                "capacity": {
+                    "cpu_cores": round(cpu, 2),
+                    "memory_gib": round(memory, 2),
+                },
+                "usage": {"cpu_percent": None, "memory_percent": None},
+            }
+        except Exception as exc:
+            logger.exception("Failed to read live Kubernetes metrics.")
+            return {
+                "mode": "unavailable",
+                "simulated": False,
+                "available": False,
+                "message": f"The Kubernetes API request failed: {exc}",
             }
 
     def get_service_endpoints_summary(
