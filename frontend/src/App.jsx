@@ -51,7 +51,7 @@ function getModeClasses(clusterHealth) {
         "border-emerald-500/20 bg-emerald-500/10 text-emerald-400",
       dot: "bg-emerald-400",
       border: "border-emerald-500/30",
-      background: "bg-emerald-500/[0.04]",
+      background: "bg-emerald-500/4",
       title: "text-emerald-300"
     };
   }
@@ -61,7 +61,7 @@ function getModeClasses(clusterHealth) {
       badge: "border-blue-500/20 bg-blue-500/10 text-blue-400",
       dot: "bg-blue-400",
       border: "border-blue-500/30",
-      background: "bg-blue-500/[0.04]",
+      background: "bg-blue-500/4",
       title: "text-blue-300"
     };
   }
@@ -70,7 +70,7 @@ function getModeClasses(clusterHealth) {
     badge: "border-rose-500/20 bg-rose-500/10 text-rose-400",
     dot: "bg-rose-400",
     border: "border-rose-500/30",
-    background: "bg-rose-500/[0.04]",
+    background: "bg-rose-500/4",
     title: "text-rose-300"
   };
 }
@@ -613,7 +613,7 @@ export default function App() {
       </aside>
 
       <main className="min-w-0 flex-1 overflow-y-auto bg-zinc-950">
-        <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-zinc-800/80 bg-zinc-950/90 px-6 backdrop-blur">
+        <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-zinc-800/80 bg-zinc-950/90 px-6 backdrop-blur-sm">
           <div className="flex min-w-0 items-center gap-2 font-mono text-xs text-zinc-500">
             <span>cluster</span>
             <span>/</span>
@@ -797,7 +797,7 @@ function OverviewTab({
                   {environmentCopy.title}
                 </h3>
 
-                <span className="rounded border border-zinc-700/70 bg-zinc-950/40 px-2 py-0.5 font-mono text-[10px] text-zinc-400">
+                <span className="rounded-sm border border-zinc-700/70 bg-zinc-950/40 px-2 py-0.5 font-mono text-[10px] text-zinc-400">
                   {environmentCopy.detail}
                 </span>
               </div>
@@ -868,7 +868,7 @@ function OverviewTab({
         </div>
 
         {resolvedIncidentTitle && !selectedScenario && (
-          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.03] p-4">
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/3 p-4">
             <div className="flex items-start gap-3">
               <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
 
@@ -917,7 +917,7 @@ function OverviewTab({
             </button>
           </div>
         ) : (
-          <div className="rounded-lg border border-dashed border-emerald-500/20 bg-emerald-500/[0.03] p-6">
+          <div className="rounded-lg border border-dashed border-emerald-500/20 bg-emerald-500/3 p-6">
             <div className="flex items-start gap-3">
               <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
 
@@ -988,7 +988,7 @@ function LabTab({
       </div>
 
       {scenariosError && scenarios.length === 0 ? (
-        <div className="space-y-3 rounded-xl border border-dashed border-rose-500/30 bg-rose-500/[0.03] p-10 text-center">
+        <div className="space-y-3 rounded-xl border border-dashed border-rose-500/30 bg-rose-500/3 p-10 text-center">
           <AlertOctagon className="mx-auto h-8 w-8 text-rose-400" />
 
           <p className="text-sm font-semibold">
@@ -1028,7 +1028,7 @@ function LabTab({
                       {scenario.category}
                     </span>
 
-                    <span className="rounded border border-zinc-700 bg-zinc-800 px-2 py-0.5 font-mono text-[10px] text-zinc-300">
+                    <span className="rounded-sm border border-zinc-700 bg-zinc-800 px-2 py-0.5 font-mono text-[10px] text-zinc-300">
                       {scenario.severity}
                     </span>
                   </div>
@@ -1127,7 +1127,7 @@ function AiTab({
       )}
 
       {isResolvedReport && rcaResult && (
-        <div className="animate-content-in rounded-lg border border-emerald-500/20 bg-emerald-500/[0.03] p-4 text-xs text-emerald-300">
+        <div className="animate-content-in rounded-lg border border-emerald-500/20 bg-emerald-500/3 p-4 text-xs text-emerald-300">
           The incident was remediated successfully. The health analysis below remains available for review.
         </div>
       )}
@@ -1138,7 +1138,7 @@ function AiTab({
           className="animate-content-in space-y-6"
         >
           {!selectedScenario && !isResolvedReport && (
-            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.03] p-4 text-xs text-emerald-300">
+            <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/3 p-4 text-xs text-emerald-300">
               Cluster health analysis completed. No active incident is associated with this report.
             </div>
           )}
@@ -1286,7 +1286,7 @@ function TerminalTab({
             onCommandChange(event.target.value)
           }
           placeholder="kubectl get pods"
-          className="min-w-0 flex-1 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2.5 font-mono text-xs text-zinc-100 outline-none transition focus:border-blue-500"
+          className="min-w-0 flex-1 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2.5 font-mono text-xs text-zinc-100 outline-hidden transition focus:border-blue-500"
         />
 
         <button
@@ -1313,7 +1313,7 @@ function TerminalTab({
           </span>
         </div>
 
-        <pre className="whitespace-pre-wrap break-words">
+        <pre className="whitespace-pre-wrap wrap-break-word">
           {terminalOutput ||
             "Output will appear here after command execution..."}
         </pre>
@@ -1362,7 +1362,7 @@ function InfoCard({
         {title}
       </span>
 
-      <p className="whitespace-pre-wrap break-words text-xs leading-relaxed text-zinc-300">
+      <p className="whitespace-pre-wrap wrap-break-word text-xs leading-relaxed text-zinc-300">
         {value}
       </p>
     </div>
@@ -1394,7 +1394,7 @@ function YamlPanel({
         {title}
       </div>
 
-      <pre className="whitespace-pre-wrap break-words">
+      <pre className="whitespace-pre-wrap wrap-break-word">
         {value || "No manifest available."}
       </pre>
     </div>
