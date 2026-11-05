@@ -155,11 +155,14 @@ confirm_account_and_cost() {
   echo "  AWS account: $account"
   echo "  Region:      $region"
   echo
-  echo "💰 Approximate cost while the cluster is running (a few tens of cents per hour):"
-  echo "  - EKS control plane   ~ \$0.10/h"
-  echo "  - NAT gateway         ~ \$0.045/h + data"
-  echo "  - 2 x t3.medium nodes ~ \$0.08/h"
-  echo "Run ./scripts/destroy.sh when you are done. This is an estimate, not a bill."
+  echo "💰 Approximate cost while the cluster is running: about 0.23-0.25 USD per hour"
+  echo "   (roughly 5-6 USD per day). Main parts:"
+  echo "  - EKS control plane   ~ 0.10 USD/h"
+  echo "  - NAT gateway         ~ 0.045 USD/h + data transfer"
+  echo "  - 2 x t3.medium nodes ~ 0.08 USD/h"
+  echo "  - public IPv4 addresses, logs, and similar small items"
+  print_warning "Leaving the cluster running burns money (or credits) fast."
+  echo "Run ./scripts/destroy.sh as soon as you are done. This is an estimate, not a bill."
   echo
 
   if ! ask_yes_no "Create these resources in account $account?"; then
