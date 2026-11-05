@@ -502,4 +502,4 @@ class KubernetesManager:
         )
 
 
-k8s_manager = KubernetesManager()
+k8s_manager = KubernetesManager()

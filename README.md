@@ -443,4 +443,4 @@ The public hosted backend should remain in Demo Mode and should not receive cred
 
 ## 📜 License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.

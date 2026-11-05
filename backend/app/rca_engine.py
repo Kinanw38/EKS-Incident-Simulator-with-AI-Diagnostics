@@ -93,4 +93,4 @@ def analyze_incident_telemetry(incident_id: str, logs: str, events: str) -> dict
         "root_cause": expert_data["root_cause"],
         "impact": expert_data["impact"],
         "recommended_fix": expert_data["recommended_fix"]
-    }
+    }
