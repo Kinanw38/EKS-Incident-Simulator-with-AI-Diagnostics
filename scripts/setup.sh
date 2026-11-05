@@ -62,7 +62,15 @@ step() {
 }
 
 cleanup_on_error() {
+  local line="$1"
+  local command="$2"
+  # The ERR trap is inherited by $(...) subshells. Stay silent there, so the
+  # message below is printed once, by the main shell.
+  if [[ "$BASHPID" != "$$" ]]; then
+    exit 1
+  fi
   print_error "Setup failed during phase: ${CURRENT_PHASE}."
+  echo "Failed command (line ${line}): ${command}"
   echo
   if [[ "$CURRENT_PHASE" == "terraform apply" || "$CURRENT_PHASE" == "terraform import" ]]; then
     print_warning "Terraform may have created some AWS resources before failing."
@@ -75,7 +83,7 @@ cleanup_on_error() {
   exit 1
 }
 
-trap cleanup_on_error ERR
+trap 'cleanup_on_error "$LINENO" "$BASH_COMMAND"' ERR
 
 command_exists() { command -v "$1" >/dev/null 2>&1; }
 
@@ -111,6 +119,7 @@ stop_stale_process() {
 }
 
 check_prerequisites() {
+  CURRENT_PHASE="checking tools"
   step 1 "Checking your tools" "Terraform builds the cluster, aws/kubectl talk to it, python/npm run the app."
   require_command terraform
   require_command aws
@@ -125,7 +134,14 @@ check_prerequisites() {
 # Terraform >= 1.9 is needed (variable validation that references other variables).
 check_terraform_version() {
   local version major minor
-  version="$(terraform version | head -n 1 | sed -E 's/^Terraform v([0-9]+\.[0-9]+).*/\1/')"
+  # sed reads all the output. "head -n 1" would close the pipe early, and with
+  # "set -o pipefail" terraform could then fail with SIGPIPE (exit 141),
+  # for example when it prints an "update available" notice after the version.
+  version="$(terraform version | sed -nE '1s/^Terraform v([0-9]+\.[0-9]+).*/\1/p')"
+  if [[ ! "$version" =~ ^[0-9]+\.[0-9]+$ ]]; then
+    print_error "Could not read the Terraform version (got: '${version}')."
+    exit 1
+  fi
   major="${version%%.*}"
   minor="${version#*.}"
   if (( major < 1 || (major == 1 && minor < 9) )); then
@@ -205,7 +221,7 @@ import_existing_log_group() {
   log_group="/aws/eks/${cluster_name}/cluster"
   address="aws_cloudwatch_log_group.cluster"
 
-  if terraform state list 2>/dev/null | grep -qx "$address"; then
+  if terraform state list 2>/dev/null | grep -x "$address" >/dev/null; then
     return 0
   fi
 
