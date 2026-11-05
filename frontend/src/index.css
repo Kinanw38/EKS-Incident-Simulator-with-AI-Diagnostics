@@ -13,20 +13,61 @@
 }
 
 /*
-  The default border color has changed to `currentcolor` in Tailwind CSS v4,
-  so we've added these compatibility styles to make sure everything still
-  looks the same as it did with Tailwind CSS v3.
-
-  If we ever want to remove these styles, we need to add an explicit border
-  color utility to any element that depends on these defaults.
+  Theme system
+  ------------
+  The components use Tailwind's zinc scale (bg-zinc-950, text-zinc-400, ...).
+  Instead of rewriting every class for light mode, the zinc scale itself is
+  redefined here, once per theme. Dark = softer blue-gray (less pure black),
+  light = the same scale inverted. The rest of the app does not need to know.
+  The theme is chosen by the data-theme attribute on <html> (see App.jsx).
 */
+:root {
+  color-scheme: dark;
+  --color-zinc-50: #f4f6fa;
+  --color-zinc-100: #e8ebf1;
+  --color-zinc-200: #d3d8e1;
+  --color-zinc-300: #b4bbc8;
+  --color-zinc-400: #939bab;
+  --color-zinc-500: #7a8394;
+  --color-zinc-600: #5b6372;
+  --color-zinc-700: #3b4250;
+  --color-zinc-800: #2a303c;
+  --color-zinc-900: #212630;
+  --color-zinc-950: #181c24;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-zinc-50: #0f172a;
+  --color-zinc-100: #162033;
+  --color-zinc-200: #1f2a3d;
+  --color-zinc-300: #334155;
+  --color-zinc-400: #475569;
+  --color-zinc-500: #5f6b7d;
+  --color-zinc-600: #7a8496;
+  --color-zinc-700: #cbd2dc;
+  --color-zinc-800: #dde2ea;
+  --color-zinc-900: #e9edf3;
+  --color-zinc-950: #f3f5f9;
+
+  /* Pale accent text is unreadable on a light background: use darker shades. */
+  --color-emerald-300: #047857;
+  --color-emerald-400: #059669;
+  --color-blue-300: #1d4ed8;
+  --color-blue-400: #2563eb;
+  --color-amber-400: #b45309;
+  --color-rose-300: #be123c;
+  --color-rose-400: #e11d48;
+}
+
+/* Elements with a plain "border" class get a neutral, theme-aware color. */
 @layer base {
   *,
   ::after,
   ::before,
   ::backdrop,
   ::file-selector-button {
-    border-color: var(--color-gray-200, currentcolor);
+    border-color: var(--color-zinc-800);
   }
 }
 
@@ -35,8 +76,8 @@ html {
 }
 
 body {
-  background-color: #09090b;
-  color: #f4f4f5;
+  background-color: var(--color-zinc-950);
+  color: var(--color-zinc-100);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   overflow-x: hidden;
   letter-spacing: -0.011em;
@@ -48,16 +89,16 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: #09090b;
+  background: var(--color-zinc-950);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #27272a;
+  background: var(--color-zinc-700);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #3f3f46;
+  background: var(--color-zinc-600);
 }
 
 button:focus-visible,
@@ -164,9 +205,9 @@ input {
 .skeleton {
   background: linear-gradient(
     90deg,
-    #18181b 25%,
-    #27272a 37%,
-    #18181b 63%
+    var(--color-zinc-900) 25%,
+    var(--color-zinc-800) 37%,
+    var(--color-zinc-900) 63%
   );
   background-size: 400% 100%;
   animation: shimmer 1.4s ease-in-out infinite;
@@ -195,6 +236,6 @@ input {
   }
 
   .skeleton {
-    background: #1f1f23;
+    background: var(--color-zinc-900);
   }
 }

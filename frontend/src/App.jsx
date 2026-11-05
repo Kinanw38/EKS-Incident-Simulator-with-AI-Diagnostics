@@ -4,11 +4,17 @@ import {
   AlertOctagon,
   ArrowRight,
   BrainCircuit,
+  Box,
   Check,
+  Cpu,
   FlaskConical,
+  MemoryStick,
+  RotateCcw,
   LayoutDashboard,
+  Moon,
   RefreshCw,
   ShieldCheck,
+  Sun,
   Terminal as TerminalIcon,
   Zap
 } from "lucide-react";
@@ -29,6 +35,23 @@ const TERMINAL_PRESETS = [
   { label: "Get Nodes", command: "kubectl get nodes" },
   { label: "Cluster Info", command: "kubectl cluster-info" }
 ];
+
+const THEME_STORAGE_KEY = "incident-sim-theme";
+
+// Stored choice first, then the system preference, then dark.
+// localStorage can throw (private windows), so every access is guarded.
+function getInitialTheme() {
+  try {
+    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+    if (stored === "light" || stored === "dark") return stored;
+  } catch {
+    // ignore: fall through to the system preference
+  }
+
+  return window.matchMedia?.("(prefers-color-scheme: light)").matches
+    ? "light"
+    : "dark";
+}
 
 function getModeLabel(clusterHealth) {
   if (clusterHealth?.mode === "live" && clusterHealth?.connected) {
@@ -108,6 +131,9 @@ export default function App() {
   const [selectedScenario, setSelectedScenario] = useState(null);
   const [resolvedIncidentTitle, setResolvedIncidentTitle] = useState(null);
 
+  const [theme, setTheme] = useState(getInitialTheme);
+  const [metrics, setMetrics] = useState(null);
+
   const [clusterHealth, setClusterHealth] = useState(null);
   const [lastHealthUpdate, setLastHealthUpdate] = useState(null);
   const [healthLoading, setHealthLoading] = useState(false);
@@ -129,6 +155,16 @@ export default function App() {
 
   const healthRequestInFlight = useRef(false);
   const initialLoadActive = useRef(true);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch {
+      // ignore: the theme still works for this visit
+    }
+  }, [theme]);
 
   const addToast = (type, title, message) => {
     const id = Date.now() + Math.random();
@@ -169,6 +205,14 @@ export default function App() {
       setClusterHealth(data.cluster);
       setLastHealthUpdate(new Date());
       setBackendReady(true);
+
+      // Metrics are optional: an older backend without /api/metrics is fine.
+      try {
+        const metricsResponse = await fetch(`${API_BASE}/metrics`);
+        setMetrics(metricsResponse.ok ? await metricsResponse.json() : null);
+      } catch {
+        setMetrics(null);
+      }
 
       return true;
     } catch (error) {
@@ -623,6 +667,27 @@ export default function App() {
             </span>
           </div>
 
+          <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() =>
+              setTheme((current) => (current === "dark" ? "light" : "dark"))
+            }
+            aria-label={
+              theme === "dark"
+                ? "Switch to light theme"
+                : "Switch to dark theme"
+            }
+            title={theme === "dark" ? "Light theme" : "Dark theme"}
+            className="flex items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900 p-2 text-zinc-400 transition hover:border-zinc-700 hover:bg-zinc-800 hover:text-zinc-200"
+          >
+            {theme === "dark" ? (
+              <Sun className="h-4 w-4" />
+            ) : (
+              <Moon className="h-4 w-4" />
+            )}
+          </button>
+
           <button
             type="button"
             onClick={() => fetchClusterHealth()}
@@ -637,6 +702,7 @@ export default function App() {
 
             {healthLoading ? "Refreshing..." : "Refresh State"}
           </button>
+          </div>
         </header>
 
         <div className="mx-auto w-full max-w-6xl space-y-8 p-6 md:p-10">
@@ -660,6 +726,7 @@ export default function App() {
                   modeClasses={modeClasses}
                   environmentCopy={environmentCopy}
                   clusterHealth={clusterHealth}
+                  metrics={metrics}
                   scenarios={scenarios}
                   selectedScenario={selectedScenario}
                   resolvedIncidentTitle={resolvedIncidentTitle}
@@ -753,6 +820,7 @@ function OverviewTab({
   modeClasses,
   environmentCopy,
   clusterHealth,
+  metrics,
   scenarios,
   selectedScenario,
   resolvedIncidentTitle,
@@ -855,6 +923,8 @@ function OverviewTab({
           iconClass="text-emerald-400"
         />
       </div>
+
+      <MetricsPanel metrics={metrics} />
 
       <div className="space-y-4 rounded-xl border border-zinc-800/80 bg-zinc-900/30 p-5">
         <div>
@@ -1268,7 +1338,7 @@ function TerminalTab({
             onClick={() =>
               onExecute(null, preset.command)
             }
-            className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1.5 font-mono text-[11px] text-zinc-300 transition hover:bg-zinc-800 hover:text-white"
+            className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1.5 font-mono text-[11px] text-zinc-300 transition hover:bg-zinc-800 hover:text-zinc-50"
           >
             {preset.label}
           </button>
@@ -1319,6 +1389,143 @@ function TerminalTab({
         </pre>
       </div>
     </section>
+  );
+}
+
+function UsageBar({ label, icon: Icon, percent, simulated }) {
+  const known = typeof percent === "number";
+  const level =
+    !known ? "bg-zinc-600" : percent >= 85 ? "bg-rose-500" : percent >= 65 ? "bg-amber-500" : "bg-emerald-500";
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between text-xs text-zinc-400">
+        <span className="flex items-center gap-2">
+          <Icon className="h-4 w-4 text-zinc-500" />
+          {label}
+        </span>
+
+        <span className="font-mono text-zinc-200">
+          {known ? `${percent}%` : "n/a"}
+          {known && simulated ? " (simulated)" : ""}
+        </span>
+      </div>
+
+      <div
+        className="h-2 overflow-hidden rounded-full bg-zinc-800"
+        role="progressbar"
+        aria-label={label}
+        aria-valuenow={known ? percent : undefined}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
+        <div
+          className={`h-full rounded-full transition-all duration-700 ${level}`}
+          style={{ width: known ? `${Math.min(percent, 100)}%` : "0%" }}
+        />
+      </div>
+
+      {!known && (
+        <p className="text-[10px] text-zinc-500">
+          Live usage needs metrics-server, which this project does not install.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function MetricsPanel({ metrics }) {
+  // Hidden when the backend is older than /api/metrics or unreachable.
+  if (!metrics || metrics.available === false) {
+    return null;
+  }
+
+  const { nodes, pods, capacity, usage, simulated } = metrics;
+
+  return (
+    <div className="space-y-5 rounded-xl border border-zinc-800/80 bg-zinc-900/30 p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold text-zinc-200">
+            Cluster Metrics
+          </h3>
+
+          <p className="mt-1 text-[11px] text-zinc-500">
+            {simulated
+              ? "Simulated values for the public demo."
+              : "Real counts from the Kubernetes API."}
+          </p>
+        </div>
+
+        {simulated && (
+          <span className="rounded-full border border-blue-500/20 bg-blue-500/10 px-2.5 py-1 font-mono text-[10px] text-blue-400">
+            SIMULATED
+          </span>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        <UsageBar
+          label="CPU usage"
+          icon={Cpu}
+          percent={usage?.cpu_percent}
+          simulated={simulated}
+        />
+
+        <UsageBar
+          label="Memory usage"
+          icon={MemoryStick}
+          percent={usage?.memory_percent}
+          simulated={simulated}
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <MetricTile
+          icon={Box}
+          label="Pods running"
+          value={`${pods.running} / ${pods.total}`}
+        />
+
+        <MetricTile
+          icon={AlertOctagon}
+          label="Pending / Failed"
+          value={`${pods.pending} / ${pods.failed}`}
+          warn={pods.pending + pods.failed > 0}
+        />
+
+        <MetricTile
+          icon={RotateCcw}
+          label="Container restarts"
+          value={pods.restarts}
+          warn={pods.restarts > 0}
+        />
+
+        <MetricTile
+          icon={Cpu}
+          label="Capacity"
+          value={`${capacity.cpu_cores} vCPU / ${capacity.memory_gib} GiB`}
+          sub={`${nodes.ready}/${nodes.total} nodes Ready`}
+        />
+      </div>
+    </div>
+  );
+}
+
+function MetricTile({ icon: Icon, label, value, sub, warn = false }) {
+  return (
+    <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+      <div className="flex items-center gap-2 text-[11px] text-zinc-400">
+        <Icon className={`h-3.5 w-3.5 ${warn ? "text-amber-400" : "text-zinc-500"}`} />
+        {label}
+      </div>
+
+      <p className="mt-1.5 font-mono text-sm font-semibold text-zinc-100">
+        {value}
+      </p>
+
+      {sub && <p className="mt-0.5 text-[10px] text-zinc-500">{sub}</p>}
+    </div>
   );
 }
 
