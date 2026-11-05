@@ -224,5 +224,139 @@ spec:
   selector:
     app: payment-processor
 """
+    },
+    "memory_leak": {
+        "id": "memory_leak",
+        "title": "Memory Leak (Growing Memory Usage)",
+        "category": "Resource Constraint",
+        "severity": "HIGH",
+        "affected_component": "cache-service",
+        "pod_label": "cache-service",
+        "description": "The cache service keeps allocating memory (about 700Mi) while its container limit is 512Mi. Two replicas fill their limit, are OOMKilled and restart in a loop, so cluster memory usage visibly climbs and drops. Bounded by design: at most 2 pods x 512Mi.",
+        "problem_yaml": """apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cache-service
+  labels:
+    app.kubernetes.io/part-of: incident-simulator
+  namespace: default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cache-service
+  template:
+    metadata:
+      labels:
+        app: cache-service
+    spec:
+      containers:
+      - name: leaky-cache
+        image: polinux/stress
+        command: ["stress"]
+        args: ["--vm", "1", "--vm-bytes", "700M", "--vm-keep"]
+        resources:
+          limits:
+            memory: "512Mi"
+          requests:
+            memory: "256Mi"
+""",
+        "fix_yaml": """apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cache-service
+  labels:
+    app.kubernetes.io/part-of: incident-simulator
+  namespace: default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cache-service
+  template:
+    metadata:
+      labels:
+        app: cache-service
+    spec:
+      containers:
+      - name: leaky-cache
+        image: polinux/stress
+        command: ["stress"]
+        args: ["--vm", "1", "--vm-bytes", "200M", "--vm-keep"]
+        resources:
+          limits:
+            memory: "512Mi"
+          requests:
+            memory: "256Mi"
+"""
+    },
+    "cpu_saturation": {
+        "id": "cpu_saturation",
+        "title": "CPU Saturation (Runaway Workers)",
+        "category": "Resource Constraint",
+        "severity": "HIGH",
+        "affected_component": "report-worker",
+        "pod_label": "report-worker",
+        "description": "Report workers spin in a busy loop. Two replicas run at their CPU limit (800m each), so cluster CPU usage visibly climbs and the pods are throttled. Bounded by design: at most 2 pods x 800m of the cluster's CPU.",
+        "problem_yaml": """apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: report-worker
+  labels:
+    app.kubernetes.io/part-of: incident-simulator
+  namespace: default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: report-worker
+  template:
+    metadata:
+      labels:
+        app: report-worker
+    spec:
+      containers:
+      - name: worker
+        image: polinux/stress
+        command: ["stress"]
+        args: ["--cpu", "1"]
+        resources:
+          limits:
+            cpu: "800m"
+            memory: "64Mi"
+          requests:
+            cpu: "100m"
+            memory: "32Mi"
+""",
+        "fix_yaml": """apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: report-worker
+  labels:
+    app.kubernetes.io/part-of: incident-simulator
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: report-worker
+  template:
+    metadata:
+      labels:
+        app: report-worker
+    spec:
+      containers:
+      - name: worker
+        image: polinux/stress
+        command: ["stress"]
+        args: ["--cpu", "1"]
+        resources:
+          limits:
+            cpu: "200m"
+            memory: "64Mi"
+          requests:
+            cpu: "100m"
+            memory: "32Mi"
+"""
     }
 }
