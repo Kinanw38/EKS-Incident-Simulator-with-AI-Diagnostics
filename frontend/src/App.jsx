@@ -3,12 +3,19 @@ import {
   Activity,
   AlertOctagon,
   ArrowRight,
-  BrainCircuit,
+  Radar,
+  ScanSearch,
+  Box,
   Check,
+  Cpu,
   FlaskConical,
+  MemoryStick,
+  RotateCcw,
   LayoutDashboard,
+  Moon,
   RefreshCw,
   ShieldCheck,
+  Sun,
   Terminal as TerminalIcon,
   Zap
 } from "lucide-react";
@@ -30,6 +37,23 @@ const TERMINAL_PRESETS = [
   { label: "Cluster Info", command: "kubectl cluster-info" }
 ];
 
+const THEME_STORAGE_KEY = "incident-sim-theme";
+
+// Stored choice first, then the system preference, then dark.
+// localStorage can throw (private windows), so every access is guarded.
+function getInitialTheme() {
+  try {
+    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+    if (stored === "light" || stored === "dark") return stored;
+  } catch {
+    // ignore: fall through to the system preference
+  }
+
+  return window.matchMedia?.("(prefers-color-scheme: light)").matches
+    ? "light"
+    : "dark";
+}
+
 function getModeLabel(clusterHealth) {
   if (clusterHealth?.mode === "live" && clusterHealth?.connected) {
     return "LIVE";
@@ -50,8 +74,8 @@ function getModeClasses(clusterHealth) {
       badge:
         "border-emerald-500/20 bg-emerald-500/10 text-emerald-400",
       dot: "bg-emerald-400",
-      border: "border-emerald-500/30",
-      background: "bg-emerald-500/4",
+      border: "border-l-emerald-500",
+      background: "bg-zinc-900/40",
       title: "text-emerald-300"
     };
   }
@@ -60,8 +84,8 @@ function getModeClasses(clusterHealth) {
     return {
       badge: "border-blue-500/20 bg-blue-500/10 text-blue-400",
       dot: "bg-blue-400",
-      border: "border-blue-500/30",
-      background: "bg-blue-500/4",
+      border: "border-l-blue-500",
+      background: "bg-zinc-900/40",
       title: "text-blue-300"
     };
   }
@@ -69,8 +93,8 @@ function getModeClasses(clusterHealth) {
   return {
     badge: "border-rose-500/20 bg-rose-500/10 text-rose-400",
     dot: "bg-rose-400",
-    border: "border-rose-500/30",
-    background: "bg-rose-500/4",
+    border: "border-l-rose-500",
+    background: "bg-zinc-900/40",
     title: "text-rose-300"
   };
 }
@@ -108,6 +132,9 @@ export default function App() {
   const [selectedScenario, setSelectedScenario] = useState(null);
   const [resolvedIncidentTitle, setResolvedIncidentTitle] = useState(null);
 
+  const [theme, setTheme] = useState(getInitialTheme);
+  const [metrics, setMetrics] = useState(null);
+
   const [clusterHealth, setClusterHealth] = useState(null);
   const [lastHealthUpdate, setLastHealthUpdate] = useState(null);
   const [healthLoading, setHealthLoading] = useState(false);
@@ -128,7 +155,60 @@ export default function App() {
   const [backendReady, setBackendReady] = useState(false);
 
   const healthRequestInFlight = useRef(false);
+  const activeIncidentRef = useRef(null);
+  activeIncidentRef.current = selectedScenario?.id ?? null;
   const initialLoadActive = useRef(true);
+
+  // Refresh the metrics right away when an incident starts or is resolved,
+  // so the dashboard reacts immediately instead of at the next 10s refresh.
+  useEffect(() => {
+    if (backendReady) {
+      fetchMetrics();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedScenario?.id]);
+
+  // The simulated demo numbers move at irregular intervals (2-5 seconds) so
+  // the dashboard feels alive. Live numbers come from the real cluster and
+  // already refresh with the 10-second health check, so they are not polled
+  // faster. Polling pauses while the tab is hidden or another tab is open.
+  const metricsSimulated = metrics?.simulated === true;
+
+  useEffect(() => {
+    if (!metricsSimulated || activeTab !== "overview" || initialLoading) {
+      return undefined;
+    }
+
+    let timer;
+    let cancelled = false;
+
+    const schedule = () => {
+      timer = window.setTimeout(async () => {
+        if (!document.hidden) {
+          await fetchMetrics();
+        }
+        if (!cancelled) schedule();
+      }, 2000 + Math.random() * 3000);
+    };
+
+    schedule();
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [metricsSimulated, activeTab, initialLoading]);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    } catch {
+      // ignore: the theme still works for this visit
+    }
+  }, [theme]);
 
   const addToast = (type, title, message) => {
     const id = Date.now() + Math.random();
@@ -145,6 +225,22 @@ export default function App() {
     setToasts((previous) =>
       previous.filter((toast) => toast.id !== id)
     );
+  };
+
+  // Metrics are optional: an older backend without /api/metrics is fine.
+  // The active incident id only shapes the simulated demo numbers.
+  const fetchMetrics = async () => {
+    const incident = activeIncidentRef.current;
+    const query = incident
+      ? `?incident=${encodeURIComponent(incident)}`
+      : "";
+
+    try {
+      const metricsResponse = await fetch(`${API_BASE}/metrics${query}`);
+      setMetrics(metricsResponse.ok ? await metricsResponse.json() : null);
+    } catch {
+      setMetrics(null);
+    }
   };
 
   const fetchClusterHealth = async ({ silent = false } = {}) => {
@@ -169,6 +265,8 @@ export default function App() {
       setClusterHealth(data.cluster);
       setLastHealthUpdate(new Date());
       setBackendReady(true);
+
+      await fetchMetrics();
 
       return true;
     } catch (error) {
@@ -510,37 +608,41 @@ export default function App() {
     {
       id: "overview",
       label: "System Overview",
+      short: "Overview",
       icon: LayoutDashboard
     },
     {
       id: "lab",
       label: "K8s Testing Lab",
+      short: "Lab",
       icon: FlaskConical
     },
     {
       id: "ai",
       label: "AI RCA & Patching",
-      icon: BrainCircuit
+      short: "AI RCA",
+      icon: ScanSearch
     },
     {
       id: "terminal",
       label: "Zero-Trust Terminal",
+      short: "Terminal",
       icon: TerminalIcon
     }
   ];
 
   return (
-    <div className="flex h-screen overflow-hidden bg-zinc-950 font-sans text-zinc-100">
+    <div className="flex h-dvh overflow-hidden bg-zinc-950 font-sans text-zinc-100">
       <ToastContainer
         toasts={toasts}
         removeToast={removeToast}
       />
 
-      <aside className="flex w-64 shrink-0 flex-col justify-between border-r border-zinc-800/80 bg-zinc-950">
+      <aside className="hidden w-64 shrink-0 flex-col justify-between border-r border-zinc-800/80 bg-zinc-950 md:flex">
         <div>
           <div className="flex items-center gap-3 border-b border-zinc-800/80 p-5">
             <div className="shrink-0 rounded-lg border border-blue-500/20 bg-blue-600/10 p-2 text-blue-400">
-              <BrainCircuit className="h-5 w-5" />
+              <Radar className="h-5 w-5" />
             </div>
 
             <div className="min-w-0">
@@ -592,7 +694,7 @@ export default function App() {
             </span>
 
             <span
-              className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[11px] ${modeClasses.badge}`}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-medium text-[11px] ${modeClasses.badge}`}
             >
               <span
                 className={`h-1.5 w-1.5 rounded-full ${modeClasses.dot}`}
@@ -613,8 +715,23 @@ export default function App() {
       </aside>
 
       <main className="min-w-0 flex-1 overflow-y-auto bg-zinc-950">
-        <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-zinc-800/80 bg-zinc-950/90 px-6 backdrop-blur-sm">
-          <div className="flex min-w-0 items-center gap-2 font-mono text-xs text-zinc-500">
+        <header className="sticky top-0 z-10 flex h-14 items-center justify-between gap-3 border-b border-zinc-800/80 bg-zinc-950/90 px-4 backdrop-blur-sm sm:px-6">
+          <div className="flex min-w-0 items-center gap-2 md:hidden">
+            <div className="shrink-0 rounded-md border border-blue-500/20 bg-blue-600/10 p-1.5 text-blue-400">
+              <Radar className="h-4 w-4" />
+            </div>
+
+            <span className="truncate text-sm font-bold">EKS RCA</span>
+
+            <span
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 font-medium text-[10px] ${modeClasses.badge}`}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${modeClasses.dot}`} />
+              {modeLabel}
+            </span>
+          </div>
+
+          <div className="hidden min-w-0 items-center gap-2 font-mono text-xs text-zinc-500 md:flex">
             <span>cluster</span>
             <span>/</span>
 
@@ -623,11 +740,33 @@ export default function App() {
             </span>
           </div>
 
+          <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() =>
+              setTheme((current) => (current === "dark" ? "light" : "dark"))
+            }
+            aria-label={
+              theme === "dark"
+                ? "Switch to light theme"
+                : "Switch to dark theme"
+            }
+            title={theme === "dark" ? "Light theme" : "Dark theme"}
+            className="flex items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900 p-2 text-zinc-400 transition hover:border-zinc-700 hover:bg-zinc-800 hover:text-zinc-200"
+          >
+            {theme === "dark" ? (
+              <Sun className="h-4 w-4" />
+            ) : (
+              <Moon className="h-4 w-4" />
+            )}
+          </button>
+
           <button
             type="button"
             onClick={() => fetchClusterHealth()}
             disabled={healthLoading}
-            className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-400 transition hover:border-zinc-700 hover:bg-zinc-800 hover:text-zinc-200 disabled:cursor-wait disabled:opacity-70"
+            aria-label="Refresh state"
+          className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-400 transition hover:border-zinc-700 hover:bg-zinc-800 hover:text-zinc-200 disabled:cursor-wait disabled:opacity-70"
           >
             <RefreshCw
               className={`h-3.5 w-3.5 ${
@@ -635,11 +774,14 @@ export default function App() {
               }`}
             />
 
-            {healthLoading ? "Refreshing..." : "Refresh State"}
+            <span className="hidden sm:inline">
+              {healthLoading ? "Refreshing..." : "Refresh State"}
+            </span>
           </button>
+          </div>
         </header>
 
-        <div className="mx-auto w-full max-w-6xl space-y-8 p-6 md:p-10">
+        <div className="mx-auto w-full max-w-6xl space-y-8 p-4 pb-24 sm:p-6 sm:pb-24 md:p-10">
           {initialLoading ? (
             <div
               key="initial-loading"
@@ -660,6 +802,7 @@ export default function App() {
                   modeClasses={modeClasses}
                   environmentCopy={environmentCopy}
                   clusterHealth={clusterHealth}
+                  metrics={metrics}
                   scenarios={scenarios}
                   selectedScenario={selectedScenario}
                   resolvedIncidentTitle={resolvedIncidentTitle}
@@ -706,6 +849,31 @@ export default function App() {
           )}
         </div>
       </main>
+
+      <nav
+        aria-label="Main navigation"
+        className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-zinc-800/80 bg-zinc-950/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-sm md:hidden"
+      >
+        {navigationItems.map((item) => {
+          const Icon = item.icon;
+          const active = activeTab === item.id;
+
+          return (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setActiveTab(item.id)}
+              aria-current={active ? "page" : undefined}
+              className={`flex flex-col items-center gap-1 px-1 py-2.5 text-[10px] font-medium ${
+                active ? "text-blue-400" : "text-zinc-500"
+              }`}
+            >
+              <Icon className="h-5 w-5" />
+              <span className="max-w-full truncate">{item.short}</span>
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 }
@@ -753,6 +921,7 @@ function OverviewTab({
   modeClasses,
   environmentCopy,
   clusterHealth,
+  metrics,
   scenarios,
   selectedScenario,
   resolvedIncidentTitle,
@@ -769,7 +938,7 @@ function OverviewTab({
           </h2>
 
           <span
-            className={`rounded-full border px-2.5 py-1 font-mono text-[10px] ${modeClasses.badge}`}
+            className={`rounded-full border px-2.5 py-1 font-medium text-[10px] ${modeClasses.badge}`}
           >
             {modeLabel} ENVIRONMENT
           </span>
@@ -781,7 +950,7 @@ function OverviewTab({
       </div>
 
       <div
-        className={`rounded-xl border p-5 ${modeClasses.border} ${modeClasses.background}`}
+        className={`rounded-xl border border-l-4 border-zinc-800 p-5 ${modeClasses.border} ${modeClasses.background}`}
       >
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
           <div className="flex items-start gap-4">
@@ -856,6 +1025,8 @@ function OverviewTab({
         />
       </div>
 
+      <MetricsPanel metrics={metrics} />
+
       <div className="space-y-4 rounded-xl border border-zinc-800/80 bg-zinc-900/30 p-5">
         <div>
           <h3 className="text-sm font-semibold text-zinc-200">
@@ -893,11 +1064,11 @@ function OverviewTab({
                   {selectedScenario.title}
                 </span>
 
-                <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 font-mono text-[10px] text-amber-400">
+                <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 font-medium text-[10px] text-amber-400">
                   ACTIVE
                 </span>
 
-                <span className="rounded-full border border-rose-500/20 bg-rose-500/10 px-2 py-0.5 font-mono text-[10px] text-rose-400">
+                <span className="rounded-full border border-rose-500/20 bg-rose-500/10 px-2 py-0.5 font-medium text-[10px] text-rose-400">
                   FAULT INJECTED
                 </span>
               </div>
@@ -910,7 +1081,7 @@ function OverviewTab({
             <button
               type="button"
               onClick={onOpenAi}
-              className="flex shrink-0 items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-medium text-white transition hover:bg-blue-500"
+              className="flex shrink-0 items-center gap-2 rounded-lg bg-zinc-100 px-4 py-2 text-xs font-medium text-zinc-950 transition hover:bg-zinc-200"
             >
               Inspect RCA
               <ArrowRight className="h-3.5 w-3.5" />
@@ -946,7 +1117,7 @@ function OverviewTab({
                     className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 px-3 py-2 text-[11px] font-medium text-zinc-300 transition hover:bg-zinc-800"
                   >
                     Run Health Analysis
-                    <BrainCircuit className="h-3.5 w-3.5" />
+                    <ScanSearch className="h-3.5 w-3.5" />
                   </button>
                 </div>
               </div>
@@ -1047,7 +1218,7 @@ function LabTab({
                   onClick={() => onRunScenario(scenario)}
                   className={`flex w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-semibold transition ${
                     active
-                      ? "bg-blue-600 text-white"
+                      ? "bg-zinc-100 text-zinc-950"
                       : "bg-zinc-800 text-zinc-200 hover:bg-zinc-700"
                   }`}
                 >
@@ -1106,12 +1277,12 @@ function AiTab({
           type="button"
           onClick={onRunAnalysis}
           disabled={rcaLoading}
-          className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex items-center justify-center gap-2 rounded-lg bg-zinc-100 px-4 py-2 text-xs font-semibold text-zinc-950 transition hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {rcaLoading ? (
             <RefreshCw className="h-3.5 w-3.5 animate-spin" />
           ) : (
-            <BrainCircuit className="h-3.5 w-3.5" />
+            <ScanSearch className="h-3.5 w-3.5" />
           )}
 
           {rcaLoading
@@ -1268,7 +1439,7 @@ function TerminalTab({
             onClick={() =>
               onExecute(null, preset.command)
             }
-            className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1.5 font-mono text-[11px] text-zinc-300 transition hover:bg-zinc-800 hover:text-white"
+            className="rounded-md border border-zinc-700 bg-zinc-900 px-3 py-1.5 font-mono text-[11px] text-zinc-300 transition hover:bg-zinc-800 hover:text-zinc-50"
           >
             {preset.label}
           </button>
@@ -1292,7 +1463,7 @@ function TerminalTab({
         <button
           type="submit"
           disabled={terminalLoading}
-          className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-xs font-semibold text-white transition hover:bg-blue-500 disabled:opacity-60"
+          className="flex items-center justify-center gap-2 rounded-lg bg-zinc-100 px-5 py-2.5 text-xs font-semibold text-zinc-950 transition hover:bg-zinc-200 disabled:opacity-60"
         >
           {terminalLoading && (
             <RefreshCw className="h-3.5 w-3.5 animate-spin" />
@@ -1322,6 +1493,196 @@ function TerminalTab({
   );
 }
 
+function UsageBar({ label, icon: Icon, percent, simulated }) {
+  const known = typeof percent === "number";
+  const level =
+    !known ? "bg-zinc-600" : percent >= 85 ? "bg-rose-500" : percent >= 65 ? "bg-amber-500" : "bg-emerald-500";
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between text-xs text-zinc-400">
+        <span className="flex items-center gap-2">
+          <Icon className="h-4 w-4 text-zinc-500" />
+          {label}
+        </span>
+
+        <span className="text-sm font-semibold tabular-nums text-zinc-100">
+          {known ? `${percent}%` : "n/a"}
+        </span>
+      </div>
+
+      <div
+        className="h-2.5 overflow-hidden rounded-full bg-zinc-800"
+        role="progressbar"
+        aria-label={label}
+        aria-valuenow={known ? percent : undefined}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
+        <div
+          className={`h-full rounded-full transition-all duration-700 ${level}`}
+          style={{ width: known ? `${Math.min(percent, 100)}%` : "0%" }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function MetricsPanel({ metrics }) {
+  // Hidden when the backend is older than /api/metrics or unreachable.
+  if (!metrics || metrics.available === false) {
+    return null;
+  }
+
+  const { nodes, pods, capacity, usage, simulated } = metrics;
+  const warnings = metrics.warnings || [];
+  const reserved = metrics.reserved;
+  const unhealthyPods = pods.unhealthy ?? pods.pending + pods.failed;
+  // Live clusters have no CPU/memory usage unless metrics-server is installed.
+  // Then the two empty "n/a" bars are replaced by one short note.
+  const hasUsage =
+    typeof usage?.cpu_percent === "number" ||
+    typeof usage?.memory_percent === "number";
+
+  return (
+    <div className="space-y-5 rounded-xl border border-zinc-800/80 bg-zinc-900/30 p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-semibold text-zinc-200">
+            Cluster Metrics
+          </h3>
+
+          <p className="mt-1 text-[11px] text-zinc-500">
+            {simulated
+              ? "Simulated values for the public demo."
+              : "Real counts from the Kubernetes API."}
+          </p>
+        </div>
+
+        {simulated && (
+          <span className="rounded-full border border-blue-500/20 bg-blue-500/10 px-2.5 py-1 font-medium text-[10px] text-blue-400">
+            SIMULATED
+          </span>
+        )}
+      </div>
+
+      {warnings.length > 0 && (
+        <ul className="space-y-1.5 rounded-lg border border-amber-500/25 bg-amber-500/5 p-3">
+          {warnings.map((warning) => (
+            <li
+              key={warning}
+              className="flex items-start gap-2 text-xs text-amber-400"
+            >
+              <AlertOctagon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              {warning}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+        {hasUsage && (
+          <>
+            <UsageBar
+              label="CPU usage"
+              icon={Cpu}
+              percent={usage?.cpu_percent}
+              simulated={simulated}
+            />
+
+            <UsageBar
+              label="Memory usage"
+              icon={MemoryStick}
+              percent={usage?.memory_percent}
+              simulated={simulated}
+            />
+          </>
+        )}
+
+        {reserved && (
+          <>
+            <UsageBar
+              label="CPU reserved (pod requests)"
+              icon={Cpu}
+              percent={reserved.cpu_percent}
+              simulated={simulated}
+            />
+
+            <UsageBar
+              label="Memory reserved (pod requests)"
+              icon={MemoryStick}
+              percent={reserved.memory_percent}
+              simulated={simulated}
+            />
+          </>
+        )}
+      </div>
+
+      {!hasUsage && (
+        <p className="text-[11px] text-zinc-500">
+          Live CPU and memory usage need metrics-server, which this project does not install. "Reserved" shows what pods requested compared with what the nodes can allocate.
+        </p>
+      )}
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <MetricTile
+          icon={Box}
+          label="Pods running"
+          value={`${pods.running} / ${pods.total}`}
+        />
+
+        <MetricTile
+          icon={AlertOctagon}
+          label="Unhealthy pods"
+          value={unhealthyPods}
+          sub="Pending, failed, or not Ready"
+          warn={unhealthyPods > 0}
+        />
+
+        <MetricTile
+          icon={RotateCcw}
+          label="Container restarts"
+          value={pods.restarts}
+          warn={pods.restarts > 0}
+        />
+
+        <MetricTile
+          icon={Cpu}
+          label="Capacity"
+          value={`${capacity.cpu_cores} vCPU`}
+          sub={`${capacity.memory_gib} GiB RAM, ${nodes.ready}/${nodes.total} nodes Ready`}
+        />
+      </div>
+    </div>
+  );
+}
+
+function MetricTile({
+  icon: Icon,
+  label,
+  value,
+  sub,
+  warn = false,
+  className = ""
+}) {
+  return (
+    <div
+      className={`min-w-0 rounded-lg border border-zinc-800 bg-zinc-950 p-3 ${className}`}
+    >
+      <div className="flex items-center gap-2 text-[11px] text-zinc-400">
+        <Icon className={`h-3.5 w-3.5 ${warn ? "text-amber-400" : "text-zinc-500"}`} />
+        {label}
+      </div>
+
+      <p className="mt-1.5 wrap-break-word text-base font-semibold tabular-nums text-zinc-100">
+        {value}
+      </p>
+
+      {sub && <p className="mt-0.5 text-[10px] text-zinc-500">{sub}</p>}
+    </div>
+  );
+}
+
 function StatCard({
   title,
   value,
@@ -1336,7 +1697,7 @@ function StatCard({
         <Icon className={`h-4 w-4 ${iconClass}`} />
       </div>
 
-      <p className="font-mono text-2xl font-bold text-zinc-100">
+      <p className="text-3xl font-semibold tabular-nums tracking-tight text-zinc-100">
         {value}
       </p>
 
@@ -1404,7 +1765,7 @@ function YamlPanel({
 function EmptyState({ message }) {
   return (
     <div className="animate-content-in rounded-xl border border-dashed border-zinc-800 p-12 text-center">
-      <BrainCircuit className="mx-auto mb-3 h-8 w-8 text-zinc-600" />
+      <ScanSearch className="mx-auto mb-3 h-8 w-8 text-zinc-600" />
 
       <p className="mx-auto max-w-xl text-xs leading-relaxed text-zinc-400">
         {message}

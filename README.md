@@ -179,7 +179,7 @@ OFFLINE
 ## 📸 Screenshots
 
 ### 📊 Dashboard Overview
-Provides high-level cluster visibility, displaying node health, workload availability, and real-time status across the environment.
+Provides high-level cluster visibility: node health, pod counts, restarts, capacity, and CPU/memory gauges. In Demo Mode the gauges are clearly labelled as simulated and follow the active incident (for example memory climbs and restarts appear during an OOMKilled incident, and return to normal after remediation); in Live Mode only values the Kubernetes API really provides are shown (live CPU/memory usage comes from metrics-server, which `scripts/setup.sh` installs from the pinned manifest in `k8s/metrics-server/`; until it reports, or if it is missing, Live Mode shows what pods have reserved through their resource requests compared with the nodes' allocatable capacity instead). A light/dark theme toggle is in the top bar.
 
 <p align="center">
   <img src="assets/screenshots/dashboard-overview.png" alt="Dashboard Overview" width="100%" />
@@ -290,7 +290,7 @@ Live Mode connects the backend to a real Kubernetes cluster.
 ### Requirements
 
 - AWS CLI.
-- Terraform 1.5 or newer.
+- Terraform 1.9 or newer.
 - kubectl.
 - Python 3.11 or newer.
 - Node.js 18 or newer.
@@ -318,20 +318,28 @@ chmod +x scripts/setup.sh scripts/destroy.sh
 ./scripts/setup.sh
 ```
 
+### Estimated cost
+
+While the cluster runs, expect roughly **0.23-0.25 USD per hour (about 5-6 USD per day)**: the EKS control plane (~0.10), the NAT gateway (~0.045 plus data), and two `t3.medium` nodes (~0.08), plus small items. This is an estimate, not a bill. Leaving the cluster running burns money fast, so run `./scripts/destroy.sh` when you are done.
+
+The setup script shows your AWS account, the region and this cost note, and asks for confirmation before it creates anything (`./scripts/setup.sh --yes` skips the question).
+
 The setup script automatically:
 
-- Checks the required tools.
+- Checks the required tools (including Terraform 1.9+).
+- Imports an existing CloudWatch log group into Terraform if an earlier run left one behind, instead of failing with "already exists".
 - Restricts the public EKS API endpoint to your current public IP (override with `EKS_ALLOWED_CIDR=203.0.113.7/32`; if your IP changes, run the script again).
 - Runs Terraform.
 - Creates or updates the EKS infrastructure.
 - Updates the local kubeconfig.
 - Waits for Kubernetes to become available.
+- Installs metrics-server (one small pod, no extra AWS cost) so the dashboard can show real CPU and memory usage.
 - Creates `backend/.venv` if it does not exist.
 - Installs backend dependencies when needed.
 - Installs frontend dependencies when needed.
-- Starts the FastAPI backend.
-- Starts the Vite frontend.
+- Starts the FastAPI backend and the Vite frontend, each in its own process group, **bound to `127.0.0.1` only** (the live backend has no authentication and can run kubectl against your cluster).
 - Prints the actual localhost URLs.
+- Reports which phase failed if something goes wrong, and tells you to run `./scripts/destroy.sh` if Terraform may have created resources.
 
 Typical output:
 
@@ -377,11 +385,16 @@ When the AWS environment is no longer needed, run:
 
 The destroy script automatically:
 
-- Stops the Vite frontend.
-- Stops the Uvicorn backend.
-- Removes Kubernetes workloads where possible.
-- Waits for related AWS resources to detach.
-- Runs `terraform destroy`.
+- Reads the cluster name and region from Terraform and builds its own temporary kubeconfig, so it never acts on whatever kubectl context happens to be active. If the cluster cannot be reached, it skips the Kubernetes cleanup and touches nothing else.
+- Stops the Vite frontend and the Uvicorn backend (whole process groups) and checks that the ports are free.
+- Deletes only the simulator's own Kubernetes resources, selected by the label `app.kubernetes.io/part-of=incident-simulator`, and any `LoadBalancer` Service (which owns an AWS load balancer that would block VPC deletion).
+- Runs `terraform destroy` with up to 3 attempts, because VPC dependency errors are often temporary.
+- Verifies the result with a PASS/FAIL list: no resources tagged `Project=AI-Incident-Simulator`, EKS cluster gone, NAT gateways deleted, Elastic IP released, CloudWatch log group gone.
+- Removes this cluster's entries from `~/.kube/config`.
+
+Use `./scripts/destroy.sh --yes` to skip the confirmation question.
+
+> The setup and destroy scripts were checked with `shellcheck` and by reading the logic, but have not been run end to end against a real AWS account by the author of this change. Check the PASS/FAIL list after your first destroy.
 
 The script does not delete:
 
@@ -420,6 +433,9 @@ The GitHub Actions pipeline runs on every push and pull request:
 ## Design Decisions
 
 - **Terraform state is local on purpose.** This is a single-user, short-lived simulator. A remote backend (S3 and a lock table) would add resources that can outlive `terraform destroy`. Keep `terraform/terraform.tfstate` until the destroy finishes: deleting it leaves the AWS resources orphaned. For a team or a long-lived environment, use a remote backend with locking.
+- **The Kubernetes version is pinned** (`kubernetes_version`, default 1.35) to a version in standard support. Versions in extended support cost 0.60 USD/h instead of 0.10 USD/h for the control plane. Check `aws eks describe-cluster-versions` when you update it.
+- **Worker nodes use Amazon Linux 2023** (`AL2023_x86_64_STANDARD`) in private subnets behind a NAT gateway. Removing the NAT gateway or moving nodes to public subnets would save money but expose the nodes, so the cost is accepted instead.
+- **The CloudWatch log group is managed by Terraform** (7-day retention), so `terraform destroy` removes it.
 - **The EKS API endpoint is public but restricted** to your IP by `scripts/setup.sh`. A production cluster would normally use a private endpoint reached through a VPN or bastion.
 - **Not included on purpose:** KMS envelope encryption for Kubernetes Secrets (it leaves a key pending deletion after destroy) and a remote Terraform backend. Both are standard in production and would be the next hardening steps.
 

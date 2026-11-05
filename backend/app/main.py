@@ -29,6 +29,9 @@ allowed_origins = [
             "http://localhost:3000,"
             "http://localhost:3001,"
             "http://localhost:5173,"
+            "http://127.0.0.1:3000,"
+            "http://127.0.0.1:3001,"
+            "http://127.0.0.1:5173,"
             "https://eks-incident-simulator-ai-diagnosti.vercel.app"
         ),
     ).split(",")
@@ -84,6 +87,18 @@ def health_check():
         "mode": k8s_manager.mode,
         "cluster": cluster_info,
     }
+
+
+@app.get("/api/metrics")
+def metrics(incident: str | None = None):
+    """Dashboard metrics (simulated in demo mode, real counts in live mode).
+
+    "incident" is the active scenario id the dashboard is showing. It only
+    shapes the simulated demo numbers; unknown values are ignored.
+    """
+    return k8s_manager.get_metrics_summary(
+        incident if incident in SCENARIOS else None
+    )
 
 
 @app.get("/api/health-analysis")
