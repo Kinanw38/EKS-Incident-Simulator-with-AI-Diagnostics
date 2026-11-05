@@ -25,10 +25,21 @@ resource "aws_iam_role_policy_attachment" "cluster_AmazonEKSClusterPolicy" {
   role       = aws_iam_role.cluster.name
 }
 
+# --- CloudWatch log group for the control plane logs ---
+# EKS creates this group by itself when enabled_cluster_log_types is set, but
+# then Terraform does not know about it and it survives "terraform destroy"
+# (and keeps costing storage). Declaring it here makes Terraform own and
+# delete it. The cluster depends on it so the group exists first.
+resource "aws_cloudwatch_log_group" "cluster" {
+  name              = "/aws/eks/${var.cluster_name}/cluster"
+  retention_in_days = 7
+}
+
 # --- EKS Cluster ---
 resource "aws_eks_cluster" "main" {
   name     = var.cluster_name
   role_arn = aws_iam_role.cluster.arn
+  version  = var.kubernetes_version
 
   vpc_config {
     subnet_ids              = concat(aws_subnet.public[*].id, aws_subnet.private[*].id)
@@ -41,6 +52,7 @@ resource "aws_eks_cluster" "main" {
 
   # Explicit network dependencies to prevent dependency/subnet locking during teardown
   depends_on = [
+    aws_cloudwatch_log_group.cluster,
     aws_iam_role_policy_attachment.cluster_AmazonEKSClusterPolicy,
     aws_internet_gateway.gw,
     aws_route_table_association.public,
@@ -91,6 +103,9 @@ resource "aws_eks_node_group" "main" {
   }
 
   instance_types = var.node_instance_types
+
+  # Explicit: Amazon Linux 2 AMIs are no longer published for current EKS versions.
+  ami_type = "AL2023_x86_64_STANDARD"
 
   # Explicit dependencies prevent timeouts during teardown/destroy
   depends_on = [
