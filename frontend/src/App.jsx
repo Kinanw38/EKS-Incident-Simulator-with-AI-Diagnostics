@@ -1585,6 +1585,7 @@ function MetricsPanel({ metrics }) {
         />
 
         <MetricTile
+          className="col-span-2 sm:col-span-1"
           icon={Cpu}
           label="Capacity"
           value={`${capacity.cpu_cores} vCPU / ${capacity.memory_gib} GiB`}
@@ -1595,15 +1596,24 @@ function MetricsPanel({ metrics }) {
   );
 }
 
-function MetricTile({ icon: Icon, label, value, sub, warn = false }) {
+function MetricTile({
+  icon: Icon,
+  label,
+  value,
+  sub,
+  warn = false,
+  className = ""
+}) {
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-950 p-3">
+    <div
+      className={`min-w-0 rounded-lg border border-zinc-800 bg-zinc-950 p-3 ${className}`}
+    >
       <div className="flex items-center gap-2 text-[11px] text-zinc-400">
         <Icon className={`h-3.5 w-3.5 ${warn ? "text-amber-400" : "text-zinc-500"}`} />
         {label}
       </div>
 
-      <p className="mt-1.5 font-mono text-sm font-semibold text-zinc-100">
+      <p className="mt-1.5 wrap-break-word font-mono text-sm font-semibold text-zinc-100">
         {value}
       </p>
 
