@@ -1,22 +1,42 @@
 version: 2
+# Max 3 open PRs per ecosystem; minor/patch updates are grouped into one PR.
+# Major versions are NOT ignored: each one gets its own PR so it can be
+# upgraded deliberately (read the migration guide, build, then merge).
 updates:
   - package-ecosystem: pip
     directory: /backend
     schedule:
       interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      python-minor-patch:
+        update-types: [minor, patch]
   - package-ecosystem: npm
     directory: /frontend
     schedule:
       interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      npm-minor-patch:
+        update-types: [minor, patch]
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      actions-minor-patch:
+        update-types: [minor, patch]
   - package-ecosystem: docker
     directory: /backend
     schedule:
       interval: weekly
+    open-pull-requests-limit: 3
   - package-ecosystem: terraform
     directory: /terraform
     schedule:
       interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      terraform-minor-patch:
+        update-types: [minor, patch]
