@@ -89,8 +89,8 @@ Thumbs.db
 *.log
 
 # ==========================================
-# Raw context/export dumps used only for AI review sessions
+# Local notes and Windows download markers
 # ==========================================
-ai-project-context.txt
-terraformfiles.txt
-kinanw38-eks-incident-simulator*.txt
+*:Zone.Identifier
+*.Zone.Identifier
+notes/
